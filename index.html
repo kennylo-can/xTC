@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>xTC</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="backdrop"></div>
+    <main class="shell">
+      <header class="hero">
+        <div>
+          <p class="eyebrow">Lockstep × Timecode Display</p>
+          <h1>xTC</h1>
+          <p class="lede">
+            输入 LTC 时间码，显示输入帧率，按你指定的输出帧率生成 MTC
+            Quarter Frame 和 Full Frame 消息。
+          </p>
+        </div>
+        <div class="hero-metrics">
+          <div class="metric">
+            <span>输入帧率</span>
+            <strong id="inputRateBadge">--</strong>
+          </div>
+          <div class="metric">
+            <span>输出帧率</span>
+            <strong id="outputRateBadge">--</strong>
+          </div>
+          <div class="metric">
+            <span>转换模式</span>
+            <strong>保持绝对时间</strong>
+          </div>
+        </div>
+      </header>
+
+      <section class="grid">
+        <article class="panel panel-input">
+          <div class="panel-head">
+            <div>
+              <p class="panel-kicker">输入 LTC</p>
+              <h2>源时间码</h2>
+            </div>
+            <div class="pill" id="sourceFormatPill">--</div>
+          </div>
+
+          <label class="field">
+            <span>时间码</span>
+            <input
+              id="inputTimecode"
+              class="timecode-input"
+              type="text"
+              value="01:00:00:00"
+              spellcheck="false"
+              autocomplete="off"
+              inputmode="numeric"
+            />
+          </label>
+
+          <label class="field">
+            <span>输入帧率</span>
+            <select id="inputRateSelect"></select>
+          </label>
+
+          <div class="chip-row">
+            <button class="chip-button" data-sample="00:00:10:00|24">24 fps 样例</button>
+            <button class="chip-button" data-sample="00:10:00;00|29.97df">29.97 DF 样例</button>
+            <button class="chip-button" data-sample="01:23:45:12|30">30 fps 样例</button>
+          </div>
+
+          <div class="callout" id="inputValidation">
+            输入一个时间码，然后选择它对应的帧率。
+          </div>
+        </article>
+
+        <article class="panel panel-display">
+          <div class="panel-head">
+            <div>
+              <p class="panel-kicker">Timecode Display</p>
+              <h2>实时显示</h2>
+            </div>
+            <div class="pill pill-accent" id="absoluteSecondsPill">0.000 s</div>
+          </div>
+
+          <div class="display-stack">
+            <div class="display-block">
+              <span>输入显示</span>
+              <strong id="inputDisplay">--:--:--:--</strong>
+            </div>
+            <div class="display-block display-highlight">
+              <span>输出显示</span>
+              <strong id="outputDisplay">--:--:--:--</strong>
+            </div>
+          </div>
+
+          <div class="stat-grid">
+            <div class="stat-card">
+              <span>输入总帧数</span>
+              <strong id="inputFrameCount">--</strong>
+            </div>
+            <div class="stat-card">
+              <span>输出总帧数</span>
+              <strong id="outputFrameCount">--</strong>
+            </div>
+            <div class="stat-card">
+              <span>输入标记</span>
+              <strong id="frameMark">--</strong>
+            </div>
+            <div class="stat-card">
+              <span>状态</span>
+              <strong id="statusLabel">等待输入</strong>
+            </div>
+          </div>
+        </article>
+
+        <article class="panel panel-output">
+          <div class="panel-head">
+            <div>
+              <p class="panel-kicker">MTC 输出</p>
+              <h2>消息编码</h2>
+            </div>
+            <div class="pill" id="rateCodePill">Rate --</div>
+          </div>
+
+          <label class="field">
+            <span>输出帧率</span>
+            <select id="outputRateSelect"></select>
+          </label>
+
+          <div class="message-box">
+            <div class="message-head">
+              <span>Full Frame SysEx</span>
+              <button class="ghost-button" id="copyFullFrame">复制</button>
+            </div>
+            <code id="fullFrameBytes">F0 7F 7F 01 01 -- -- -- -- F7</code>
+          </div>
+
+          <div class="message-box">
+            <div class="message-head">
+              <span>Quarter Frames</span>
+              <button class="ghost-button" id="copyQuarterFrames">复制</button>
+            </div>
+            <div id="quarterFrames" class="quarter-grid"></div>
+          </div>
+        </article>
+      </section>
+    </main>
+
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>
