@@ -36,21 +36,7 @@ struct IconGenerator {
   private func write(image: CGImage, to url: URL) throws {
     switch url.pathExtension.lowercased() {
     case "icns":
-      let sizes: [Int] = [16, 32, 64, 128, 256, 512, 1024]
-      guard let destination = CGImageDestinationCreateWithURL(url as CFURL, UTType.icns.identifier as CFString, sizes.count, nil) else {
-        throw NSError(domain: "IconGenerator", code: 2, userInfo: [NSLocalizedDescriptionKey: "Failed to create ICNS destination"])
-      }
-
-      for size in sizes {
-        guard let resized = resize(image: image, to: size) else {
-          throw NSError(domain: "IconGenerator", code: 3, userInfo: [NSLocalizedDescriptionKey: "Failed to resize icon to \(size)"])
-        }
-        CGImageDestinationAddImage(destination, resized, nil)
-      }
-
-      guard CGImageDestinationFinalize(destination) else {
-        throw NSError(domain: "IconGenerator", code: 4, userInfo: [NSLocalizedDescriptionKey: "Failed to finalize ICNS"])
-      }
+      try writeIcns(image: image, to: url)
     case "png":
       guard let destination = CGImageDestinationCreateWithURL(url as CFURL, UTType.png.identifier as CFString, 1, nil) else {
         throw NSError(domain: "IconGenerator", code: 5, userInfo: [NSLocalizedDescriptionKey: "Failed to create PNG destination"])
@@ -61,6 +47,64 @@ struct IconGenerator {
       }
     default:
       throw NSError(domain: "IconGenerator", code: 7, userInfo: [NSLocalizedDescriptionKey: "Unsupported output format"])
+    }
+  }
+
+  private func writeIcns(image: CGImage, to url: URL) throws {
+    let fileManager = FileManager.default
+    let tempRoot = fileManager.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+    let iconsetURL = tempRoot.appendingPathComponent("AppIcon.iconset", isDirectory: true)
+    try fileManager.createDirectory(at: iconsetURL, withIntermediateDirectories: true, attributes: nil)
+
+    let variants: [(name: String, size: Int)] = [
+      ("icon_16x16.png", 16),
+      ("icon_16x16@2x.png", 32),
+      ("icon_32x32.png", 32),
+      ("icon_32x32@2x.png", 64),
+      ("icon_128x128.png", 128),
+      ("icon_128x128@2x.png", 256),
+      ("icon_256x256.png", 256),
+      ("icon_256x256@2x.png", 512),
+      ("icon_512x512.png", 512),
+      ("icon_512x512@2x.png", 1024)
+    ]
+
+    defer {
+      try? fileManager.removeItem(at: tempRoot)
+    }
+
+    for variant in variants {
+      guard let resized = resize(image: image, to: variant.size) else {
+        throw NSError(domain: "IconGenerator", code: 3, userInfo: [NSLocalizedDescriptionKey: "Failed to resize icon to \(variant.size)"])
+      }
+      let output = iconsetURL.appendingPathComponent(variant.name)
+      try writePNG(resized, to: output)
+    }
+
+    let process = Process()
+    process.executableURL = URL(fileURLWithPath: "/usr/bin/iconutil")
+    process.arguments = ["-c", "icns", iconsetURL.path, "-o", url.path]
+
+    let pipe = Pipe()
+    process.standardOutput = pipe
+    process.standardError = pipe
+    try process.run()
+    process.waitUntilExit()
+
+    guard process.terminationStatus == 0 else {
+      let data = pipe.fileHandleForReading.readDataToEndOfFile()
+      let message = String(data: data, encoding: .utf8) ?? "iconutil failed"
+      throw NSError(domain: "IconGenerator", code: 8, userInfo: [NSLocalizedDescriptionKey: message])
+    }
+  }
+
+  private func writePNG(_ image: CGImage, to url: URL) throws {
+    guard let destination = CGImageDestinationCreateWithURL(url as CFURL, UTType.png.identifier as CFString, 1, nil) else {
+      throw NSError(domain: "IconGenerator", code: 5, userInfo: [NSLocalizedDescriptionKey: "Failed to create PNG destination"])
+    }
+    CGImageDestinationAddImage(destination, image, nil)
+    guard CGImageDestinationFinalize(destination) else {
+      throw NSError(domain: "IconGenerator", code: 6, userInfo: [NSLocalizedDescriptionKey: "Failed to finalize PNG"])
     }
   }
 

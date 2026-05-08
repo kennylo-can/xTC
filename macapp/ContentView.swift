@@ -127,15 +127,14 @@ struct ContentView: View {
   }
 
   var body: some View {
-    let canvasWidth: CGFloat = 840
-    let canvasHeight: CGFloat = 490
+    let canvasWidth: CGFloat = 800
+    let canvasHeight: CGFloat = 458
     let metrics = metrics(for: canvasWidth)
 
     ZStack {
       background
 
       VStack(spacing: 0) {
-        titleBar(metrics: metrics)
         VStack(spacing: metrics.stackTopSpacing) {
           mainContent(metrics: metrics)
           footerBar(metrics: metrics)
@@ -187,11 +186,11 @@ struct ContentView: View {
   }
 
   private func metrics(for width: CGFloat) -> LayoutMetrics {
-    let scale: CGFloat = max(0.54, min(0.62, width / 1600.0))
+    let scale: CGFloat = max(0.48, min(0.58, width / 1600.0))
 
     return LayoutMetrics(
       scale: scale,
-      titleBarHeight: max(38, 42 * scale),
+      titleBarHeight: max(34, 40 * scale),
       outerPadding: max(10, 14 * scale),
       panelSpacing: max(10, 12 * scale),
       panelPadding: max(10, 14 * scale),

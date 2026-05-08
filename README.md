@@ -51,6 +51,22 @@ The script builds:
 - the bundled app icon
 - the small C-based LTC decoder used by the audio pipeline
 
+### DMG package
+
+Run:
+
+```bash
+./build-dmg.sh
+```
+
+This creates:
+- `build/xTC.app`
+- `build/xTC.dmg`
+
+The DMG includes:
+- the app bundle
+- a `Gatekeeper Guide.md` file with bilingual install/open instructions
+
 ### Permission / 权限
 
 On first launch, macOS may ask for microphone permission.
