@@ -6,3 +6,4 @@ build/
 *.swp
 *.tmp
 *.log
+.claude/worktrees/
