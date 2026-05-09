@@ -31,16 +31,22 @@ final class AudioLTCManager: ObservableObject {
   private var lastDecodedFrames: Int?
   private var validFrameStreak: Int = 0
 
+  // Hot-plug listener
+  private var hotPlugListenerAdded = false
+  private var deviceListenerBlock: AudioObjectPropertyListenerBlock?
+
   init() {
     refreshDevices()
     if let defaultID = defaultInputDeviceID() ?? devices.first?.id {
       selectedDeviceID = defaultID
     }
+    registerHotPlugListener()
   }
 
   deinit {
     shutdownAudio()
     releaseDecoder()
+    removeHotPlugListener()
   }
 
   func refreshDevices() {
@@ -70,13 +76,13 @@ final class AudioLTCManager: ObservableObject {
   }
 
   func startMonitoring() {
-    guard let deviceID = selectedDeviceID else {
+    guard selectedDeviceID != nil else {
       statusText = AppLanguageStore.text("No audio input available", "没有可用的音频输入")
       return
     }
 
     isRunning = true
-    configureDefaultInputDevice(deviceID)
+    // Device is set per-engine via AUHAL in restartEngine() — doesn't touch system mic
 
     let detectedSampleRate = engine.inputNode.inputFormat(forBus: 0).sampleRate
     let currentSampleRate = detectedSampleRate > 0 ? detectedSampleRate : 48_000
@@ -135,6 +141,26 @@ final class AudioLTCManager: ObservableObject {
 
   private func restartEngine() {
     shutdownAudio()
+
+    // Set the input device only for this app's audio unit (AUHAL), without
+    // touching the system-wide default microphone setting.
+    if let deviceID = selectedDeviceID, let audioUnit = engine.inputNode.audioUnit {
+      var device = deviceID
+      let setStatus = AudioUnitSetProperty(
+        audioUnit,
+        kAudioOutputUnitProperty_CurrentDevice,
+        kAudioUnitScope_Global,
+        0,
+        &device,
+        UInt32(MemoryLayout<AudioDeviceID>.size)
+      )
+      if setStatus != noErr {
+        DispatchQueue.main.async {
+          self.statusText = AppLanguageStore.text("Unable to switch input device", "无法切换输入设备") + ": \(setStatus)"
+        }
+        return
+      }
+    }
 
     let inputNode = engine.inputNode
     let format = inputNode.outputFormat(forBus: 0)
@@ -323,26 +349,45 @@ final class AudioLTCManager: ObservableObject {
     decoder = nil
   }
 
-  private func configureDefaultInputDevice(_ deviceID: AudioDeviceID) {
-    var device = deviceID
+  // MARK: - Hot-plug listener
+
+  private func registerHotPlugListener() {
+    guard !hotPlugListenerAdded else { return }
     var address = AudioObjectPropertyAddress(
-      mSelector: kAudioHardwarePropertyDefaultInputDevice,
+      mSelector: kAudioHardwarePropertyDevices,
       mScope: kAudioObjectPropertyScopeGlobal,
       mElement: kAudioObjectPropertyElementMain
     )
-    let status = AudioObjectSetPropertyData(
+    let block: AudioObjectPropertyListenerBlock = { [weak self] _, _ in
+      self?.refreshDevices()
+    }
+    deviceListenerBlock = block
+    let status = AudioObjectAddPropertyListenerBlock(
       AudioObjectID(kAudioObjectSystemObject),
       &address,
-      0,
-      nil,
-      UInt32(MemoryLayout<AudioDeviceID>.size),
-      &device
+      DispatchQueue.main,
+      block
     )
-    if status != noErr {
-      mainQueue.async {
-        self.statusText = AppLanguageStore.text("Unable to switch input device", "无法切换输入设备") + ": \(status)"
-      }
+    if status == noErr {
+      hotPlugListenerAdded = true
     }
+  }
+
+  private func removeHotPlugListener() {
+    guard hotPlugListenerAdded, let block = deviceListenerBlock else { return }
+    var address = AudioObjectPropertyAddress(
+      mSelector: kAudioHardwarePropertyDevices,
+      mScope: kAudioObjectPropertyScopeGlobal,
+      mElement: kAudioObjectPropertyElementMain
+    )
+    AudioObjectRemovePropertyListenerBlock(
+      AudioObjectID(kAudioObjectSystemObject),
+      &address,
+      DispatchQueue.main,
+      block
+    )
+    hotPlugListenerAdded = false
+    deviceListenerBlock = nil
   }
 
   private func shutdownAudio() {

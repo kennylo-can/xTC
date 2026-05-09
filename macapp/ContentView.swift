@@ -1,5 +1,6 @@
 import SwiftUI
 import AppKit
+import CoreAudio
 
 enum InputMode: String, CaseIterable, Identifiable {
   case ltc
@@ -59,9 +60,13 @@ struct ContentView: View {
   @StateObject private var audio = AudioLTCManager()
 
   @AppStorage(AppLanguageStore.storageKey) private var languageRaw = AppLanguage.english.rawValue
+  @AppStorage("inputRateID")  private var inputRateID: String  = "2997df"
+  @AppStorage("outputRateID") private var outputRateID: String  = "2997df"
+  @AppStorage("savedAudioDeviceID") private var savedAudioDeviceID: Int = 0
+  @AppStorage("savedMIDISourceID")  private var savedMIDISourceID:  Int = 0
+  @AppStorage("savedMIDIDestID")    private var savedMIDIDestID:    Int = 0
+
   @State private var inputMode: InputMode = .ltc
-  @State private var inputRateID: String = "2997df"
-  @State private var outputRateID: String = "2997df"
   @State private var isRunning: Bool = true
 
   private var language: AppLanguage {
@@ -147,41 +152,72 @@ struct ContentView: View {
     .frame(width: canvasWidth, height: canvasHeight)
     .background(WindowSizer(size: CGSize(width: canvasWidth, height: canvasHeight)))
     .onAppear {
+      // Restore persisted device selections (validate against current device list)
+      if savedAudioDeviceID != 0 {
+        let deviceID = AudioDeviceID(savedAudioDeviceID)
+        if audio.devices.contains(where: { $0.id == deviceID }) {
+          audio.selectedDeviceID = deviceID
+        }
+      }
+      if savedMIDISourceID != 0 {
+        let sourceID = Int32(savedMIDISourceID)
+        if midi.sources.contains(where: { $0.id == sourceID }) {
+          midi.selectedSourceID = sourceID
+        }
+      }
+      if savedMIDIDestID != 0 {
+        let destID = Int32(savedMIDIDestID)
+        if midiOut.destinations.contains(where: { $0.id == destID }) {
+          midiOut.selectedDestinationID = destID
+        }
+      }
       syncInputPipeline()
       updateOutputPipeline()
-      transmitIfNeeded()
+      midiOut.startClock(rate: outputRate)
     }
     .onChange(of: inputMode) { _ in
       syncInputPipeline()
-      transmitIfNeeded()
     }
     .onChange(of: inputRateID) { _ in
       audio.setExpectedRate(inputRate)
-      transmitIfNeeded()
     }
     .onChange(of: outputRateID) { _ in
-      transmitIfNeeded()
+      midiOut.updateRate(outputRate)
     }
-    .onChange(of: isRunning) { _ in
-      transmitIfNeeded()
+    .onChange(of: isRunning) { running in
+      if running {
+        syncInputPipeline()
+        midiOut.startClock(rate: outputRate)
+      } else {
+        audio.stopMonitoring()
+        midi.disconnect()
+        midiOut.stopClock()
+      }
     }
     .onReceive(audio.$receivedTimecode) { _ in
-      transmitIfNeeded()
+      feedOutputClock()
     }
     .onReceive(audio.$inputLevel) { _ in }
     .onReceive(midi.$receivedTimecode) { _ in
-      transmitIfNeeded()
+      feedOutputClock()
     }
     .onReceive(midi.$detectedRate) { _ in
-      transmitIfNeeded()
+      feedOutputClock()
     }
     .onReceive(midi.$selectedSourceID) { _ in
       if inputMode == .mtc {
         midi.connectSelectedSource()
       }
     }
-    .onReceive(midiOut.$selectedDestinationID) { _ in
-      transmitIfNeeded()
+    // Persist device selections
+    .onChange(of: audio.selectedDeviceID) { id in
+      if let id { savedAudioDeviceID = Int(id) }
+    }
+    .onChange(of: midi.selectedSourceID) { id in
+      if let id { savedMIDISourceID = Int(id) }
+    }
+    .onChange(of: midiOut.selectedDestinationID) { id in
+      if let id { savedMIDIDestID = Int(id) }
     }
   }
 
@@ -319,6 +355,14 @@ struct ContentView: View {
             caption: t("(Hrs:Mins:Secs:Frs)", "(时:分:秒:帧)"),
             metrics: metrics
           )
+        }
+
+        // LTC input frame-rate selector (MTC detects rate automatically)
+        if inputMode == .ltc {
+          VStack(alignment: .leading, spacing: 8) {
+            panelFieldTitle(t("EXPECTED RATE:", "预期帧率："), metrics: metrics)
+            inputRateStrip(metrics: metrics)
+          }
         }
 
         signalSection(
@@ -617,6 +661,38 @@ struct ContentView: View {
         )
     }
     .buttonStyle(.plain)
+  }
+
+  private func inputRateStrip(metrics: LayoutMetrics) -> some View {
+    ScrollView(.horizontal, showsIndicators: false) {
+      HStack(spacing: 8) {
+        ForEach(TimecodeMath.inputRates, id: \.id) { rate in
+          Button {
+            inputRateID = rate.id
+          } label: {
+            Text(rateDisplay(rate))
+              .font(.system(size: metrics.rateChipFont, weight: .semibold, design: .rounded))
+              .foregroundStyle(inputRate.id == rate.id ? .black : .white.opacity(0.9))
+              .padding(.horizontal, metrics.rateChipHPad)
+              .padding(.vertical, metrics.rateChipVPad)
+              .background(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                  .fill(inputRate.id == rate.id ? Color(red: 0.27, green: 0.58, blue: 1.0) : Color.white.opacity(0.06))
+              )
+              .overlay(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                  .strokeBorder(
+                    inputRate.id == rate.id ? Color(red: 0.27, green: 0.58, blue: 1.0) : Color.white.opacity(0.08),
+                    lineWidth: 1
+                  )
+              )
+          }
+          .buttonStyle(.plain)
+        }
+      }
+      .frame(maxWidth: .infinity, alignment: .leading)
+    }
+    .frame(maxWidth: .infinity)
   }
 
   private func outputRateStrip(metrics: LayoutMetrics) -> some View {
@@ -954,14 +1030,14 @@ struct ContentView: View {
 
   private func updateOutputPipeline() {
     midiOut.refreshDestinations()
+    midiOut.startClock(rate: outputRate)
   }
 
-  private func transmitIfNeeded() {
+  /// Feed the current output timecode position to the independent MTC output clock.
+  /// The clock runs at outputRate.fps × 4 Hz and sends QF nibbles on its own timer.
+  private func feedOutputClock() {
     guard isRunning, let conversion else { return }
-    midiOut.sendConvertedTimecode(
-      fullFrame: TimecodeMath.mtcFullFrameBytes(conversion.outputTimecode, rate: outputRate),
-      quarterFrames: TimecodeMath.mtcQuarterFrameBytes(conversion.outputTimecode, rate: outputRate)
-    )
+    midiOut.updatePosition(tc: conversion.outputTimecode, rate: outputRate)
   }
 }
 

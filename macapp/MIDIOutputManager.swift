@@ -6,14 +6,162 @@ struct MIDIDestinationItem: Identifiable, Hashable {
   let name: String
 }
 
+// MARK: - MTCClock
+// Plain class (NOT @MainActor). All mutable state is confined to its private
+// serial queue, which allows DispatchSourceTimer to call tick() at real-time
+// priority without competing with the main actor.
+
+private final class MTCClock {
+  private let queue: DispatchQueue
+  private var timer: DispatchSourceTimer?
+
+  // All vars below are only ever touched on `queue`
+  private var rate: FrameRateOption?
+  private var piece: Int = 0
+  private var baseSeconds: Double = 0
+  private var baseDate: Date = Date()
+  private var currentSeconds: Double = 0
+  private var lastSentSeconds: Double?
+  private var isRunning: Bool = false
+  private var destination: MIDIEndpointRef?
+  var outputPort: MIDIPortRef = 0   // set once from setupClient; read on queue
+
+  init(queue: DispatchQueue) {
+    self.queue = queue
+  }
+
+  // MARK: Public API (may be called from any thread/actor)
+
+  func setOutputPort(_ port: MIDIPortRef) {
+    queue.async { self.outputPort = port }
+  }
+
+  func setDestination(_ endpoint: MIDIEndpointRef?) {
+    queue.async { self.destination = endpoint }
+  }
+
+  func start(rate: FrameRateOption) {
+    queue.async { self.startInternal(rate: rate) }
+  }
+
+  func stop() {
+    queue.async { self.stopInternal() }
+  }
+
+  func updateRate(_ newRate: FrameRateOption) {
+    queue.async {
+      let wasRunning = self.isRunning
+      if wasRunning { self.stopInternal() }
+      self.rate = newRate
+      self.lastSentSeconds = nil    // force Full Frame on next updatePosition
+      if wasRunning { self.startInternal(rate: newRate) }
+    }
+  }
+
+  func updatePosition(tc: TimecodeValue, rate: FrameRateOption, capturedAt now: Date) {
+    let newSeconds = TimecodeMath.timecodeToSeconds(tc, rate: rate)
+    // Capture rate for use inside the closure (avoids @MainActor crossing)
+    let fps = rate.fps
+
+    queue.async {
+      let isJump: Bool
+      if let last = self.lastSentSeconds {
+        let elapsed = now.timeIntervalSince(self.baseDate)
+        let predicted = last + elapsed
+        isJump = abs(newSeconds - predicted) > (2.0 / fps)
+      } else {
+        isJump = true
+      }
+
+      self.baseSeconds = newSeconds
+      self.baseDate = now
+      self.lastSentSeconds = newSeconds
+
+      if isJump {
+        self.piece = 0
+        self.currentSeconds = newSeconds
+        self.sendFullFrame(tc: tc, rate: rate)
+      }
+
+      if !self.isRunning {
+        self.startInternal(rate: rate)
+      }
+    }
+  }
+
+  // MARK: Private — all run on queue
+
+  private func startInternal(rate: FrameRateOption) {
+    self.rate = rate
+    stopInternal()
+    isRunning = true
+
+    let interval = 1.0 / (rate.fps * 4.0)   // e.g. 120 Hz at 30 fps
+    let t = DispatchSource.makeTimerSource(flags: .strict, queue: queue)
+    t.schedule(deadline: .now(), repeating: interval, leeway: .microseconds(200))
+    t.setEventHandler { [weak self] in self?.tick() }
+    t.resume()
+    timer = t
+  }
+
+  private func stopInternal() {
+    timer?.cancel()
+    timer = nil
+    isRunning = false
+  }
+
+  private func tick() {
+    guard isRunning, let rate = self.rate, lastSentSeconds != nil else { return }
+    // Snapshot TC once per 8-piece cycle so all nibbles encode the same frame
+    if piece == 0 {
+      currentSeconds = baseSeconds + Date().timeIntervalSince(baseDate)
+    }
+    let tc = TimecodeMath.secondsToTimecode(currentSeconds, rate: rate)
+    sendQF(piece: piece, tc: tc, rate: rate)
+    piece = (piece + 1) % 8
+  }
+
+  private func sendQF(piece: Int, tc: TimecodeValue, rate: FrameRateOption) {
+    let all = TimecodeMath.mtcQuarterFrameBytes(tc, rate: rate)
+    guard piece < all.count else { return }
+    sendRaw(all[piece])
+  }
+
+  private func sendFullFrame(tc: TimecodeValue, rate: FrameRateOption) {
+    sendRaw(TimecodeMath.mtcFullFrameBytes(tc, rate: rate))
+  }
+
+  private func sendRaw(_ bytes: [UInt8]) {
+    guard let dest = destination, outputPort != 0 else { return }
+    var packetList = MIDIPacketList()
+    let packet = MIDIPacketListInit(&packetList)
+    bytes.withUnsafeBytes { buf in
+      guard let base = buf.baseAddress else { return }
+      _ = MIDIPacketListAdd(
+        &packetList, MemoryLayout<MIDIPacketList>.size,
+        packet, 0, buf.count,
+        base.assumingMemoryBound(to: UInt8.self)
+      )
+    }
+    MIDISend(outputPort, dest, &packetList)
+  }
+}
+
+// MARK: - MIDIOutputManager
+
 @MainActor
 final class MIDIOutputManager: ObservableObject {
   @Published var destinations: [MIDIDestinationItem] = []
-  @Published var selectedDestinationID: Int32?
+  @Published var selectedDestinationID: Int32? {
+    didSet { pushDestinationToClock() }
+  }
   @Published var statusText: String = AppLanguageStore.text("No output selected", "未选择输出")
 
   private var client = MIDIClientRef()
   private var outputPort = MIDIPortRef()
+
+  private let clockQueue = DispatchQueue(label: "xtc.mtc.outputclock", qos: .userInteractive)
+  private lazy var clock = MTCClock(queue: clockQueue)
 
   init() {
     setupClient()
@@ -23,43 +171,64 @@ final class MIDIOutputManager: ObservableObject {
     }
   }
 
+  // MARK: - Destination management
+
   func refreshDestinations() {
     var items: [MIDIDestinationItem] = []
     let count = MIDIGetNumberOfDestinations()
     for index in 0..<count {
       let endpoint = MIDIGetDestination(index)
       guard endpoint != 0 else { continue }
-      let uid = uniqueID(for: endpoint)
-      let name = displayName(for: endpoint)
-      items.append(MIDIDestinationItem(id: uid, name: name))
+      items.append(MIDIDestinationItem(id: uniqueID(for: endpoint), name: displayName(for: endpoint)))
     }
     destinations = items
-    if selectedDestinationID == nil {
+
+    if let current = selectedDestinationID, !items.contains(where: { $0.id == current }) {
+      selectedDestinationID = items.first?.id
+    } else if selectedDestinationID == nil {
       selectedDestinationID = items.first?.id
     }
+
     statusText = items.isEmpty
       ? AppLanguageStore.text("No MIDI output available", "没有可用的 MIDI 输出")
-      : AppLanguageStore.text("Listed", "已列出") + " \(items.count) " + AppLanguageStore.text("MIDI outputs", "个 MIDI 输出")
+      : AppLanguageStore.text("Ready", "就绪") + " — \(items.count) " + AppLanguageStore.text("output(s)", "个输出")
+    pushDestinationToClock()
   }
 
-  func send(fullFrame bytes: [UInt8]) {
-    send(rawBytes: bytes)
+  // MARK: - Output Clock API
+
+  func startClock(rate: FrameRateOption) {
+    clock.start(rate: rate)
   }
 
-  func send(quarterFrames pieces: [[UInt8]]) {
-    for piece in pieces {
-      send(rawBytes: piece)
-    }
+  func stopClock() {
+    clock.stop()
   }
 
-  func sendConvertedTimecode(fullFrame: [UInt8], quarterFrames: [[UInt8]]) {
-    send(fullFrame: fullFrame)
-    send(quarterFrames: quarterFrames)
-    statusText = AppLanguageStore.text("Sent MTC", "已发送 MTC")
+  func updateRate(_ rate: FrameRateOption) {
+    clock.updateRate(rate)
+  }
+
+  func updatePosition(tc: TimecodeValue, rate: FrameRateOption) {
+    clock.updatePosition(tc: tc, rate: rate, capturedAt: Date())
+  }
+
+  // MARK: - Internals
+
+  private func pushDestinationToClock() {
+    let endpoint = selectedDestinationID.flatMap { destinationEndpoint(forUniqueID: $0) }
+    clock.setDestination(endpoint)
   }
 
   private func setupClient() {
-    let createStatus = MIDIClientCreateWithBlock("xTCOutputClient" as CFString, &client) { _ in }
+    let createStatus = MIDIClientCreateWithBlock("xTCOutputClient" as CFString, &client) { [weak self] notification in
+      let msgID = notification.pointee.messageID
+      if msgID == .msgObjectAdded || msgID == .msgObjectRemoved || msgID == .msgSetupChanged {
+        Task { @MainActor [weak self] in
+          self?.refreshDestinations()
+        }
+      }
+    }
     guard createStatus == noErr else {
       statusText = AppLanguageStore.text("Unable to create MIDI client", "无法创建 MIDI Client") + ": \(createStatus)"
       return
@@ -70,32 +239,11 @@ final class MIDIOutputManager: ObservableObject {
       statusText = AppLanguageStore.text("Unable to create MIDI output port", "无法创建 MIDI Output Port") + ": \(portStatus)"
       return
     }
+
+    clock.setOutputPort(outputPort)
   }
 
-  private func send(rawBytes: [UInt8]) {
-    guard let selectedDestinationID,
-          let destination = destinationEndpoint(forUniqueID: selectedDestinationID)
-    else {
-      statusText = AppLanguageStore.text("No MIDI output selected", "未选择 MIDI 输出")
-      return
-    }
-
-    var packetList = MIDIPacketList()
-    let packet = MIDIPacketListInit(&packetList)
-    let addResult: UnsafeMutablePointer<MIDIPacket>? = rawBytes.withUnsafeBytes { buffer in
-      guard let baseAddress = buffer.baseAddress else { return nil }
-      return MIDIPacketListAdd(&packetList, MemoryLayout<MIDIPacketList>.size, packet, 0, buffer.count, baseAddress.assumingMemoryBound(to: UInt8.self))
-    }
-    guard addResult != nil else {
-      statusText = AppLanguageStore.text("Failed to build MIDI packet", "写入 MIDI 包失败")
-      return
-    }
-
-    let status = MIDISend(outputPort, destination, &packetList)
-    if status != noErr {
-      statusText = AppLanguageStore.text("Send failed", "发送失败") + ": \(status)"
-    }
-  }
+  // MARK: - CoreMIDI helpers
 
   private func uniqueID(for endpoint: MIDIEndpointRef) -> Int32 {
     var uid: Int32 = 0
@@ -105,12 +253,10 @@ final class MIDIOutputManager: ObservableObject {
 
   private func displayName(for endpoint: MIDIEndpointRef) -> String {
     var cfName: Unmanaged<CFString>?
-    if MIDIObjectGetStringProperty(endpoint, kMIDIPropertyDisplayName, &cfName) == noErr, let name = cfName?.takeRetainedValue() as String? {
-      return name
-    }
-    if MIDIObjectGetStringProperty(endpoint, kMIDIPropertyName, &cfName) == noErr, let name = cfName?.takeRetainedValue() as String? {
-      return name
-    }
+    if MIDIObjectGetStringProperty(endpoint, kMIDIPropertyDisplayName, &cfName) == noErr,
+       let name = cfName?.takeRetainedValue() as String? { return name }
+    if MIDIObjectGetStringProperty(endpoint, kMIDIPropertyName, &cfName) == noErr,
+       let name = cfName?.takeRetainedValue() as String? { return name }
     return AppLanguageStore.text("MIDI Destination", "MIDI 输出")
   }
 
@@ -119,9 +265,7 @@ final class MIDIOutputManager: ObservableObject {
     for index in 0..<count {
       let endpoint = MIDIGetDestination(index)
       guard endpoint != 0 else { continue }
-      if uniqueID(for: endpoint) == uid {
-        return endpoint
-      }
+      if uniqueID(for: endpoint) == uid { return endpoint }
     }
     return nil
   }

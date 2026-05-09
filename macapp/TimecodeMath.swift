@@ -37,9 +37,10 @@ enum TimecodeMathError: LocalizedError, Equatable {
 
 enum TimecodeMath {
   static let inputRates: [FrameRateOption] = [
+    FrameRateOption(id: "2398", label: "23.976", fps: 24000.0 / 1001.0, dropFrame: false, mtcRateCode: 0),
     FrameRateOption(id: "24", label: "24 fps", fps: 24, dropFrame: false, mtcRateCode: 0),
     FrameRateOption(id: "25", label: "25 fps", fps: 25, dropFrame: false, mtcRateCode: 1),
-    FrameRateOption(id: "2997df", label: "29.97 NTSC", fps: 30000.0 / 1001.0, dropFrame: true, mtcRateCode: 2),
+    FrameRateOption(id: "2997df", label: "29.97 DF", fps: 30000.0 / 1001.0, dropFrame: true, mtcRateCode: 2),
     FrameRateOption(id: "30", label: "30 fps", fps: 30, dropFrame: false, mtcRateCode: 3),
   ]
 
@@ -159,7 +160,14 @@ enum TimecodeMath {
       let secondsPart = labelFrames / framesPerSecondLabel
       let frames = labelFrames % framesPerSecondLabel
 
-      return TimecodeValue(negative: false, hours: hours, minutes: minutes, seconds: secondsPart, frames: frames, delimiter: ";")
+      // Ensure DF-illegal positions (non-10th minute, sec=0, frame 0 or 1) are pushed to frame 2
+      let correctedFrames: Int
+      if minutes % 10 != 0, secondsPart == 0, frames < 2 {
+        correctedFrames = 2
+      } else {
+        correctedFrames = frames
+      }
+      return TimecodeValue(negative: false, hours: hours, minutes: minutes, seconds: secondsPart, frames: correctedFrames, delimiter: ";")
     }
 
     let labelFps = nominalFrameCount(for: rate)
@@ -219,7 +227,7 @@ enum TimecodeMath {
       0x70 | UInt8(((code & 0x03) << 1) | hourHighBit),
     ]
 
-    return pieces.enumerated().map { index, data in [0xf1, data] }
+    return pieces.map { data in [0xf1, data] }
   }
 
   static func detectedRate(forDelimiter delimiter: Character, frames: Int) -> FrameRateOption {

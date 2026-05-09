@@ -15,6 +15,14 @@ ICON_REFERENCE="$ROOT_DIR/assets/AppIconReference.png"
 ICNS_PATH="$RESOURCES_DIR/AppIcon.icns"
 LTC_C_DIR="$ROOT_DIR/vendor/libltc"
 LTC_BRIDGE_HEADER="$ROOT_DIR/macapp/LTCBridge.h"
+
+# Detect host architecture and build accordingly
+HOST_ARCH="$(uname -m)"
+if [ "$HOST_ARCH" = "arm64" ]; then
+  TARGET="arm64-apple-macos13.0"
+else
+  TARGET="x86_64-apple-macos13.0"
+fi
 LTC_DECODER_OBJ="$BUILD_DIR/decoder.o"
 
 mkdir -p "$MODULE_CACHE" "$MACOS_DIR" "$RESOURCES_DIR"
@@ -24,12 +32,15 @@ if [ ! -f "$ICON_REFERENCE" ]; then
   exit 1
 fi
 
+echo "→ Generating app icon..."
 DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer \
 SWIFT_MODULE_CACHE_PATH="$MODULE_CACHE" \
 CLANG_MODULE_CACHE_PATH="$MODULE_CACHE" \
 swift "$ROOT_DIR/tools/generate_app_icon.swift" "$ICON_REFERENCE" "$ICNS_PATH"
 
-clang -std=c99 -O2 -target arm64-apple-macos13.0 -isysroot "$SDK_PATH" -I"$LTC_C_DIR" -c "$LTC_C_DIR/decoder.c" -o "$LTC_DECODER_OBJ"
+echo "→ Compiling LTC C decoder ($TARGET)..."
+clang -std=c99 -O2 -target "$TARGET" -isysroot "$SDK_PATH" \
+  -I"$LTC_C_DIR" -c "$LTC_C_DIR/decoder.c" -o "$LTC_DECODER_OBJ"
 
 cat > "$CONTENTS_DIR/Info.plist" <<'EOF'
 <?xml version="1.0" encoding="UTF-8"?>
@@ -49,9 +60,9 @@ cat > "$CONTENTS_DIR/Info.plist" <<'EOF'
   <key>CFBundlePackageType</key>
   <string>APPL</string>
   <key>CFBundleShortVersionString</key>
-  <string>1.0</string>
+  <string>1.2</string>
   <key>CFBundleVersion</key>
-  <string>1</string>
+  <string>2</string>
   <key>LSMinimumSystemVersion</key>
   <string>13.0</string>
   <key>NSMicrophoneUsageDescription</key>
@@ -62,12 +73,13 @@ cat > "$CONTENTS_DIR/Info.plist" <<'EOF'
 </plist>
 EOF
 
+echo "→ Compiling Swift sources ($TARGET)..."
 DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer \
 SWIFT_MODULE_CACHE_PATH="$MODULE_CACHE" \
 CLANG_MODULE_CACHE_PATH="$MODULE_CACHE" \
 swiftc -parse-as-library \
   -import-objc-header "$LTC_BRIDGE_HEADER" \
-  -target arm64-apple-macos13.0 \
+  -target "$TARGET" \
   -sdk "$SDK_PATH" \
   "$ROOT_DIR/macapp/xTCApp.swift" \
   "$ROOT_DIR/macapp/Localization.swift" \
@@ -82,7 +94,10 @@ swiftc -parse-as-library \
   -o "$BIN_PATH" \
   -framework SwiftUI \
   -framework AppKit \
-  -framework CoreMIDI
+  -framework CoreMIDI \
+  -framework CoreAudio \
+  -framework AVFAudio
 
 chmod +x "$BIN_PATH"
-echo "Built: $APP_BUNDLE"
+echo ""
+echo "✅ Built: $APP_BUNDLE"
