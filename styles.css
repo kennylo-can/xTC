@@ -155,7 +155,7 @@ h1 {
 
 .grid {
   display: grid;
-  grid-template-columns: 1.05fr 1.2fr 0.95fr;
+  grid-template-columns: 1fr 1.15fr 1fr;
   gap: 18px;
 }
 
@@ -226,6 +226,21 @@ h1 {
   transition: border-color 180ms ease, box-shadow 180ms ease, transform 180ms ease;
 }
 
+.field select {
+  appearance: none;
+  -webkit-appearance: none;
+  padding-right: 40px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%239cb0c7' stroke-width='1.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 14px center;
+  cursor: pointer;
+}
+
+.field select option {
+  background: #0d1a2d;
+  color: var(--text);
+}
+
 .field select:focus,
 .field input:focus,
 .chip-button:focus,
@@ -250,13 +265,17 @@ h1 {
   border: 1px solid rgba(171, 196, 255, 0.18);
   border-radius: 999px;
   color: var(--text);
+  font-family: var(--font-sans);
   cursor: pointer;
   transition: transform 160ms ease, border-color 160ms ease, background 160ms ease;
 }
 
 .chip-button {
-  padding: 10px 14px;
+  padding: 10px 16px;
   background: rgba(255, 255, 255, 0.04);
+  font-size: 0.84rem;
+  font-weight: 500;
+  letter-spacing: 0.01em;
 }
 
 .chip-button:hover,
@@ -383,9 +402,11 @@ h1 {
 }
 
 .ghost-button {
-  padding: 8px 12px;
+  padding: 8px 14px;
   background: rgba(255, 255, 255, 0.03);
   font-size: 0.82rem;
+  font-weight: 500;
+  letter-spacing: 0.01em;
 }
 
 button:active {

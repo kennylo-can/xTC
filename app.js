@@ -129,7 +129,7 @@ function render() {
   const validation = validateTimecode(parsed.value, inputRate);
 
   dom.sourceFormatPill.textContent = inputRate.dropFrame ? "Drop Frame" : "Non-Drop";
-  dom.frameMark.textContent = parsed.value.delimiter === ";" ? "； DF" : "： NDF";
+  dom.frameMark.textContent = parsed.value.delimiter === ";" ? "; DF" : ": NDF";
   dom.rateCodePill.textContent = `Rate ${outputRate.mtcRateCode}`;
 
   if (!validation.ok) {

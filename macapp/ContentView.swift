@@ -9,6 +9,13 @@ enum InputMode: String, CaseIterable, Identifiable {
   var id: String { rawValue }
 }
 
+enum OutputMode: String, CaseIterable, Identifiable {
+  case ltc
+  case mtc
+
+  var id: String { rawValue }
+}
+
 private struct ConversionSnapshot {
   let inputTimecode: TimecodeValue
   let inputRate: FrameRateOption
@@ -67,6 +74,7 @@ struct ContentView: View {
   @AppStorage("savedMIDIDestID")    private var savedMIDIDestID:    Int = 0
 
   @State private var inputMode: InputMode = .ltc
+  @State private var outputMode: OutputMode = .mtc
   @State private var isRunning: Bool = true
 
   private var language: AppLanguage {
@@ -132,8 +140,8 @@ struct ContentView: View {
   }
 
   var body: some View {
-    let canvasWidth: CGFloat = 800
-    let canvasHeight: CGFloat = 458
+    let canvasWidth: CGFloat = 860
+    let canvasHeight: CGFloat = 460
     let metrics = metrics(for: canvasWidth)
 
     ZStack {
@@ -183,6 +191,13 @@ struct ContentView: View {
     }
     .onChange(of: outputRateID) { _ in
       midiOut.updateRate(outputRate)
+    }
+    .onChange(of: outputMode) { mode in
+      if mode == .mtc {
+        midiOut.startClock(rate: outputRate)
+      } else {
+        midiOut.stopClock()
+      }
     }
     .onChange(of: isRunning) { running in
       if running {
@@ -242,7 +257,7 @@ struct ContentView: View {
       smallFont: max(9, 11 * scale),
       buttonFont: max(11, 14 * scale),
       buttonHeight: max(30, 36 * scale),
-      segmentedWidth: max(128, 150 * scale),
+      segmentedWidth: max(116, 140 * scale),
       segmentedHeight: max(28, 32 * scale),
       deviceButtonHeight: max(28, 32 * scale),
       rateChipFont: max(10, 12 * scale),
@@ -255,7 +270,7 @@ struct ContentView: View {
       statusFont: max(9, 10 * scale),
       meterHeight: max(8, 10 * scale),
       meterSpacing: max(2, 3 * scale),
-      centerColumnWidth: max(144, 170 * scale),
+      centerColumnWidth: max(164, 196 * scale),
       stackTopSpacing: max(10, 14 * scale)
     )
   }
@@ -322,8 +337,8 @@ struct ContentView: View {
   private func mainContent(metrics: LayoutMetrics) -> some View {
     HStack(alignment: .top, spacing: metrics.panelSpacing) {
       inputPanel(metrics: metrics)
-      outputPanel(metrics: metrics)
       centerColumn(metrics: metrics)
+      outputPanel(metrics: metrics)
     }
   }
 
@@ -398,9 +413,11 @@ struct ContentView: View {
           outputModeBadge(metrics: metrics)
         }
 
-        VStack(alignment: .leading, spacing: 8) {
-          panelFieldTitle(t("OUTPUT DEVICE:", "输出设备："), metrics: metrics)
-          outputDeviceRow(metrics: metrics)
+        if outputMode == .mtc {
+          VStack(alignment: .leading, spacing: 8) {
+            panelFieldTitle(t("OUTPUT DEVICE:", "输出设备："), metrics: metrics)
+            outputDeviceRow(metrics: metrics)
+          }
         }
 
         VStack(alignment: .leading, spacing: 8) {
@@ -412,24 +429,40 @@ struct ContentView: View {
           HStack(alignment: .firstTextBaseline) {
             panelFieldTitle(t("OUTPUT TIMECODE", "输出时间码"), metrics: metrics)
             Spacer(minLength: 8)
-            Text(t("(active conversion)", "(正在转换)"))
-              .font(.system(size: metrics.bodyFont, weight: .medium))
-              .foregroundStyle(Color(red: 1.0, green: 0.67, blue: 0.25))
+            if outputMode == .mtc {
+              Text(t("(active conversion)", "(正在转换)"))
+                .font(.system(size: metrics.bodyFont, weight: .medium))
+                .foregroundStyle(Color(red: 1.0, green: 0.67, blue: 0.25))
+            } else {
+              Text(t("(LTC out)", "(LTC 输出)"))
+                .font(.system(size: metrics.bodyFont, weight: .medium))
+                .foregroundStyle(.white.opacity(0.42))
+            }
           }
 
           timecodeDisplay(
             text: outputTimecodeText,
-            tint: Color(red: 1.0, green: 0.58, blue: 0.16),
+            tint: outputMode == .mtc
+              ? Color(red: 1.0, green: 0.58, blue: 0.16)
+              : Color(red: 0.55, green: 0.55, blue: 0.55),
             caption: nil,
             metrics: metrics
           )
         }
 
+        if outputMode == .ltc {
+          ltcOutputNotice(metrics: metrics)
+        }
+
         panelFooter(
           label: t("OUTPUT FRAME RATE:", "输出帧率："),
           value: rateDisplay(outputRate),
-          accent: Color(red: 1.0, green: 0.58, blue: 0.16),
-          subtext: isRunning ? t("(active)", "(运行中)") : t("(paused)", "(已暂停)"),
+          accent: outputMode == .mtc
+            ? Color(red: 1.0, green: 0.58, blue: 0.16)
+            : .white.opacity(0.45),
+          subtext: outputMode == .mtc
+            ? (isRunning ? t("(active)", "(运行中)") : t("(paused)", "(已暂停)"))
+            : t("(not available)", "(暂不支持)"),
           dots: .orange,
           metrics: metrics
         )
@@ -437,46 +470,52 @@ struct ContentView: View {
     }
   }
 
-  private func centerColumn(metrics: LayoutMetrics) -> some View {
-    VStack(spacing: 10) {
-      Spacer(minLength: 14)
-
-      Text(isRunning ? t("( CONVERTING )", "( 转换中 )") : t("( PAUSED )", "( 已暂停 )"))
-        .font(.system(size: max(18, metrics.panelSubtitleFont + 8), weight: .bold, design: .rounded))
-        .foregroundStyle(isRunning ? Color(red: 1.0, green: 0.58, blue: 0.18) : .white.opacity(0.42))
-        .shadow(color: Color(red: 1.0, green: 0.58, blue: 0.18).opacity(isRunning ? 0.65 : 0.0), radius: 12)
-        .lineLimit(1)
-        .minimumScaleFactor(0.72)
-
-      Button {
-        isRunning.toggle()
-      } label: {
-        Text(isRunning ? t("STOP", "停止") : t("START", "开始"))
-          .font(.system(size: metrics.buttonFont, weight: .semibold, design: .rounded))
-          .frame(maxWidth: .infinity)
-          .frame(height: metrics.buttonHeight)
-          .foregroundStyle(.white.opacity(0.92))
-          .background(
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
-              .fill(
-                LinearGradient(
-                  colors: [Color.white.opacity(0.24), Color.white.opacity(0.12)],
-                  startPoint: .top,
-                  endPoint: .bottom
-                )
-              )
-          )
-          .overlay(
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
-              .strokeBorder(Color.white.opacity(0.14), lineWidth: 1)
-          )
-      }
-      .buttonStyle(.plain)
-
-      latencyStat(metrics: metrics)
-      Spacer(minLength: 14)
+  private func ltcOutputNotice(metrics: LayoutMetrics) -> some View {
+    HStack(spacing: 8) {
+      Image(systemName: "info.circle")
+        .font(.system(size: metrics.bodyFont, weight: .medium))
+        .foregroundStyle(.white.opacity(0.45))
+      Text(t("LTC audio output is not yet available.", "LTC 音频输出暂未支持。"))
+        .font(.system(size: metrics.bodyFont, weight: .medium))
+        .foregroundStyle(.white.opacity(0.55))
+        .lineLimit(2)
+        .fixedSize(horizontal: false, vertical: true)
     }
-    .padding(.horizontal, 2)
+    .padding(.horizontal, 12)
+    .padding(.vertical, 9)
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .background(
+      RoundedRectangle(cornerRadius: 10, style: .continuous)
+        .fill(Color.white.opacity(0.04))
+    )
+    .overlay(
+      RoundedRectangle(cornerRadius: 10, style: .continuous)
+        .strokeBorder(Color.white.opacity(0.09), lineWidth: 1)
+    )
+  }
+
+  private func centerColumn(metrics: LayoutMetrics) -> some View {
+    VStack(spacing: 0) {
+      Spacer()
+
+      VStack(spacing: 12) {
+        Text(isRunning ? t("( CONVERTING )", "( 转换中 )") : t("( PAUSED )", "( 已暂停 )"))
+          .font(.system(size: max(15, metrics.panelSubtitleFont + 6), weight: .bold, design: .rounded))
+          .foregroundStyle(isRunning ? Color(red: 1.0, green: 0.58, blue: 0.18) : .white.opacity(0.42))
+          .shadow(color: Color(red: 1.0, green: 0.58, blue: 0.18).opacity(isRunning ? 0.65 : 0.0), radius: 12)
+          .lineLimit(1)
+          .minimumScaleFactor(0.7)
+          .multilineTextAlignment(.center)
+
+        StopStartButton(isRunning: isRunning, metrics: metrics) {
+          isRunning.toggle()
+        }
+
+        latencyStat(metrics: metrics)
+      }
+
+      Spacer()
+    }
     .frame(maxHeight: .infinity)
     .frame(width: metrics.centerColumnWidth)
   }
@@ -501,10 +540,12 @@ struct ContentView: View {
 
   private func outputModeBadge(metrics: LayoutMetrics) -> some View {
     HStack(spacing: 0) {
-      modeSegment(title: "LTC", active: false, color: Color.white.opacity(0.13), metrics: metrics) {}
-        .disabled(true)
-      modeSegment(title: "MTC", active: true, color: Color(red: 1.0, green: 0.55, blue: 0.12), metrics: metrics) {}
-        .disabled(true)
+      modeSegment(title: "LTC", active: outputMode == .ltc, color: Color(red: 1.0, green: 0.55, blue: 0.12), metrics: metrics) {
+        outputMode = .ltc
+      }
+      modeSegment(title: "MTC", active: outputMode == .mtc, color: Color(red: 1.0, green: 0.55, blue: 0.12), metrics: metrics) {
+        outputMode = .mtc
+      }
     }
     .frame(width: metrics.segmentedWidth, height: metrics.segmentedHeight)
     .background(Color.black.opacity(0.42))
@@ -516,14 +557,7 @@ struct ContentView: View {
   }
 
   private func modeSegment(title: String, active: Bool, color: Color, metrics: LayoutMetrics, action: @escaping () -> Void) -> some View {
-    Button(action: action) {
-      Text(title)
-        .font(.system(size: max(12, metrics.buttonFont - 1), weight: .semibold, design: .rounded))
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .foregroundStyle(active ? .black : .white.opacity(0.9))
-        .background(active ? color : Color.clear)
-    }
-    .buttonStyle(.plain)
+    ModeSegmentButton(title: title, active: active, color: color, fontSize: max(12, metrics.buttonFont - 1), action: action)
   }
 
   private func sourceDeviceRow(metrics: LayoutMetrics) -> some View {
@@ -640,54 +674,23 @@ struct ContentView: View {
   }
 
   private func refreshButton(metrics: LayoutMetrics, action: @escaping () -> Void) -> some View {
-    Button(action: action) {
-      Image(systemName: "arrow.clockwise")
-        .font(.system(size: max(11, metrics.smallFont), weight: .semibold))
-        .frame(width: metrics.deviceButtonHeight, height: metrics.deviceButtonHeight)
-        .foregroundStyle(.white.opacity(0.82))
-        .background(
-          RoundedRectangle(cornerRadius: 9, style: .continuous)
-            .fill(
-              LinearGradient(
-                colors: [Color(white: 0.31), Color(white: 0.22)],
-                startPoint: .top,
-                endPoint: .bottom
-              )
-            )
-        )
-        .overlay(
-          RoundedRectangle(cornerRadius: 9, style: .continuous)
-            .strokeBorder(Color.black.opacity(0.56), lineWidth: 1)
-        )
-    }
-    .buttonStyle(.plain)
+    RefreshButton(height: metrics.deviceButtonHeight, iconSize: max(11, metrics.smallFont), action: action)
   }
 
   private func inputRateStrip(metrics: LayoutMetrics) -> some View {
     ScrollView(.horizontal, showsIndicators: false) {
       HStack(spacing: 8) {
         ForEach(TimecodeMath.inputRates, id: \.id) { rate in
-          Button {
+          RateChipButton(
+            label: rateDisplay(rate),
+            selected: inputRate.id == rate.id,
+            accentColor: Color(red: 0.27, green: 0.58, blue: 1.0),
+            fontSize: metrics.rateChipFont,
+            hPad: metrics.rateChipHPad,
+            vPad: metrics.rateChipVPad
+          ) {
             inputRateID = rate.id
-          } label: {
-            Text(rateDisplay(rate))
-              .font(.system(size: metrics.rateChipFont, weight: .semibold, design: .rounded))
-              .foregroundStyle(inputRate.id == rate.id ? .black : .white.opacity(0.9))
-              .padding(.horizontal, metrics.rateChipHPad)
-              .padding(.vertical, metrics.rateChipVPad)
-              .background(
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                  .fill(inputRate.id == rate.id ? Color(red: 0.27, green: 0.58, blue: 1.0) : Color.white.opacity(0.06))
-              )
-              .overlay(
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                  .strokeBorder(
-                    inputRate.id == rate.id ? Color(red: 0.27, green: 0.58, blue: 1.0) : Color.white.opacity(0.08),
-                    lineWidth: 1
-                  )
-              )
           }
-          .buttonStyle(.plain)
         }
       }
       .frame(maxWidth: .infinity, alignment: .leading)
@@ -699,24 +702,16 @@ struct ContentView: View {
     ScrollView(.horizontal, showsIndicators: false) {
       HStack(spacing: 8) {
         ForEach(TimecodeMath.outputRates, id: \.id) { rate in
-          Button {
+          RateChipButton(
+            label: rateDisplay(rate),
+            selected: outputRate.id == rate.id,
+            accentColor: Color(red: 1.0, green: 0.58, blue: 0.16),
+            fontSize: metrics.rateChipFont,
+            hPad: metrics.rateChipHPad,
+            vPad: metrics.rateChipVPad
+          ) {
             outputRateID = rate.id
-          } label: {
-            Text(rateDisplay(rate))
-              .font(.system(size: metrics.rateChipFont, weight: .semibold, design: .rounded))
-              .foregroundStyle(outputRate.id == rate.id ? .black : .white.opacity(0.9))
-              .padding(.horizontal, metrics.rateChipHPad)
-              .padding(.vertical, metrics.rateChipVPad)
-              .background(
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                  .fill(outputRate.id == rate.id ? Color(red: 1.0, green: 0.58, blue: 0.16) : Color.white.opacity(0.06))
-              )
-              .overlay(
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                  .strokeBorder(outputRate.id == rate.id ? Color(red: 1.0, green: 0.58, blue: 0.16) : Color.white.opacity(0.08), lineWidth: 1)
-              )
           }
-          .buttonStyle(.plain)
         }
       }
       .frame(maxWidth: .infinity, alignment: .leading)
@@ -823,21 +818,22 @@ struct ContentView: View {
   }
 
   private func latencyStat(metrics: LayoutMetrics) -> some View {
-    HStack(spacing: 10) {
+    VStack(alignment: .leading, spacing: 4) {
       Text(t("Latency", "延迟"))
-        .font(.system(size: max(10, metrics.smallFont), weight: .semibold, design: .rounded))
-        .foregroundStyle(.white.opacity(0.72))
+        .font(.system(size: max(9, metrics.smallFont), weight: .semibold, design: .rounded))
+        .foregroundStyle(.white.opacity(0.55))
         .lineLimit(1)
-
-      Spacer(minLength: 8)
 
       Text(latencyValueText)
         .font(.system(size: max(11, metrics.bodyFont), weight: .semibold, design: .monospaced))
         .foregroundStyle(Color(red: 0.29, green: 1.0, blue: 0.33))
         .lineLimit(1)
+        .minimumScaleFactor(0.75)
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
     .padding(.horizontal, 12)
-    .padding(.vertical, 8)
+    .padding(.vertical, 9)
+    .frame(maxWidth: .infinity)
     .background(
       RoundedRectangle(cornerRadius: 12, style: .continuous)
         .fill(Color.black.opacity(0.34))
@@ -903,16 +899,19 @@ struct ContentView: View {
   }
 
   private func panelHeader<Content: View>(title: String, subtitle: String, metrics: LayoutMetrics, @ViewBuilder trailing: () -> Content) -> some View {
-    HStack(alignment: .center, spacing: 12) {
+    HStack(alignment: .center, spacing: 10) {
       Text(title)
         .font(.system(size: metrics.panelTitleFont, weight: .heavy, design: .rounded))
         .foregroundStyle(.white.opacity(0.95))
+        .lineLimit(1)
+        .minimumScaleFactor(0.8)
 
-      Spacer(minLength: 8)
+      Spacer(minLength: 4)
 
       Text(subtitle)
         .font(.system(size: metrics.panelSubtitleFont, weight: .semibold, design: .rounded))
         .foregroundStyle(.white.opacity(0.80))
+        .lineLimit(1)
 
       trailing()
     }
@@ -1047,4 +1046,167 @@ private struct DotColor {
 
   static let blue = DotColor(primary: Color(red: 0.27, green: 0.58, blue: 1.0), secondary: Color.white.opacity(0.16))
   static let orange = DotColor(primary: Color(red: 1.0, green: 0.58, blue: 0.16), secondary: Color.white.opacity(0.16))
+}
+
+// MARK: - Reusable interactive components
+
+/// Segmented-control segment with hover + press visual feedback.
+private struct ModeSegmentButton: View {
+  let title: String
+  let active: Bool
+  let color: Color
+  let fontSize: CGFloat
+  let action: () -> Void
+
+  @State private var isHovered = false
+
+  var body: some View {
+    Button(action: action) {
+      Text(title)
+        .font(.system(size: fontSize, weight: .semibold, design: .rounded))
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .foregroundStyle(active ? .black : .white.opacity(isHovered ? 1.0 : 0.88))
+        .background(
+          active
+            ? color
+            : (isHovered ? Color.white.opacity(0.14) : Color.clear)
+        )
+        .contentShape(Rectangle())
+    }
+    .buttonStyle(PressButtonStyle())
+    .onHover { isHovered = $0 }
+    .animation(.easeInOut(duration: 0.1), value: isHovered)
+  }
+}
+
+/// ButtonStyle that gives a subtle press-down scale + opacity effect.
+private struct PressButtonStyle: ButtonStyle {
+  func makeBody(configuration: Configuration) -> some View {
+    configuration.label
+      .opacity(configuration.isPressed ? 0.70 : 1.0)
+      .scaleEffect(configuration.isPressed ? 0.95 : 1.0)
+      .animation(.spring(response: 0.18, dampingFraction: 0.75), value: configuration.isPressed)
+  }
+}
+
+/// Refresh (↺) icon button with hover + press feedback.
+private struct RefreshButton: View {
+  let height: CGFloat
+  let iconSize: CGFloat
+  let action: () -> Void
+
+  @State private var isHovered = false
+
+  var body: some View {
+    Button(action: action) {
+      Image(systemName: "arrow.clockwise")
+        .font(.system(size: iconSize, weight: .semibold))
+        .frame(width: height, height: height)
+        .foregroundStyle(.white.opacity(isHovered ? 1.0 : 0.82))
+        .background(
+          RoundedRectangle(cornerRadius: 9, style: .continuous)
+            .fill(
+              LinearGradient(
+                colors: isHovered
+                  ? [Color(white: 0.40), Color(white: 0.30)]
+                  : [Color(white: 0.31), Color(white: 0.22)],
+                startPoint: .top,
+                endPoint: .bottom
+              )
+            )
+        )
+        .overlay(
+          RoundedRectangle(cornerRadius: 9, style: .continuous)
+            .strokeBorder(Color.black.opacity(0.56), lineWidth: 1)
+            .allowsHitTesting(false)
+        )
+        .contentShape(Rectangle())
+    }
+    .buttonStyle(PressButtonStyle())
+    .onHover { isHovered = $0 }
+    .animation(.easeInOut(duration: 0.1), value: isHovered)
+  }
+}
+
+/// STOP / START button with hover highlight and press animation.
+private struct StopStartButton: View {
+  let isRunning: Bool
+  let metrics: LayoutMetrics
+  let action: () -> Void
+
+  @State private var isHovered = false
+
+  var body: some View {
+    Button(action: action) {
+      Text(isRunning
+           ? AppLanguageStore.text("STOP", "停止")
+           : AppLanguageStore.text("START", "开始"))
+        .font(.system(size: metrics.buttonFont, weight: .semibold, design: .rounded))
+        .frame(maxWidth: .infinity)
+        .frame(height: metrics.buttonHeight)
+        .foregroundStyle(.white.opacity(0.92))
+        .background(
+          RoundedRectangle(cornerRadius: 10, style: .continuous)
+            .fill(
+              LinearGradient(
+                colors: isHovered
+                  ? [Color.white.opacity(0.34), Color.white.opacity(0.20)]
+                  : [Color.white.opacity(0.24), Color.white.opacity(0.12)],
+                startPoint: .top,
+                endPoint: .bottom
+              )
+            )
+        )
+        .overlay(
+          RoundedRectangle(cornerRadius: 10, style: .continuous)
+            .strokeBorder(Color.white.opacity(isHovered ? 0.28 : 0.14), lineWidth: 1)
+            .allowsHitTesting(false)
+        )
+        .contentShape(Rectangle())
+    }
+    .buttonStyle(PressButtonStyle())
+    .onHover { isHovered = $0 }
+    .animation(.easeInOut(duration: 0.12), value: isHovered)
+  }
+}
+
+/// Rate chip (23.976 / 24fps / …) with hover + press feedback.
+private struct RateChipButton: View {
+  let label: String
+  let selected: Bool
+  let accentColor: Color
+  let fontSize: CGFloat
+  let hPad: CGFloat
+  let vPad: CGFloat
+  let action: () -> Void
+
+  @State private var isHovered = false
+
+  var body: some View {
+    Button(action: action) {
+      Text(label)
+        .font(.system(size: fontSize, weight: .semibold, design: .rounded))
+        .foregroundStyle(selected ? .black : .white.opacity(isHovered ? 1.0 : 0.88))
+        .padding(.horizontal, hPad)
+        .padding(.vertical, vPad)
+        .background(
+          RoundedRectangle(cornerRadius: 8, style: .continuous)
+            .fill(selected
+                  ? accentColor
+                  : (isHovered ? Color.white.opacity(0.12) : Color.white.opacity(0.06)))
+        )
+        .overlay(
+          RoundedRectangle(cornerRadius: 8, style: .continuous)
+            .strokeBorder(
+              selected ? accentColor : Color.white.opacity(isHovered ? 0.18 : 0.08),
+              lineWidth: 1
+            )
+            .allowsHitTesting(false)
+        )
+        .contentShape(Rectangle())
+    }
+    .buttonStyle(PressButtonStyle())
+    .onHover { isHovered = $0 }
+    .animation(.easeInOut(duration: 0.1), value: isHovered)
+  }
 }
