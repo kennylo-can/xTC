@@ -64,6 +64,7 @@ private struct LayoutMetrics {
 struct ContentView: View {
   @StateObject private var midi = MIDIManager()
   @StateObject private var midiOut = MIDIOutputManager()
+  @StateObject private var ltcOut = AudioLTCOutputManager()
   @StateObject private var audio = AudioLTCManager()
 
   @AppStorage(AppLanguageStore.storageKey) private var languageRaw = AppLanguage.english.rawValue
@@ -189,20 +190,28 @@ struct ContentView: View {
       midiOut.updateRate(outputRate)
     }
     .onChange(of: outputMode) { mode in
-      if mode == .mtc {
+      switch mode {
+      case .mtc:
         midiOut.startClock(rate: outputRate)
-      } else {
+        ltcOut.stopOutput()
+      case .ltc:
         midiOut.stopClock()
+        ltcOut.startOutput(rate: outputRate)
       }
     }
     .onChange(of: isRunning) { running in
       if running {
         syncInputPipeline()
-        midiOut.startClock(rate: outputRate)
+        if outputMode == .mtc {
+          midiOut.startClock(rate: outputRate)
+        } else {
+          ltcOut.startOutput(rate: outputRate)
+        }
       } else {
         audio.stopMonitoring()
         midi.disconnect()
         midiOut.stopClock()
+        ltcOut.stopOutput()
       }
     }
     .onReceive(audio.$receivedTimecode) { _ in
@@ -439,7 +448,10 @@ struct ContentView: View {
         }
 
         if outputMode == .ltc {
-          ltcOutputNotice(metrics: metrics)
+          VStack(spacing: 10) {
+            ltcOutputNotice(metrics: metrics)
+            ltcOutputDeviceMenu(metrics: metrics)
+          }
         }
 
         panelFooter(
@@ -460,14 +472,19 @@ struct ContentView: View {
 
   private func ltcOutputNotice(metrics: LayoutMetrics) -> some View {
     HStack(spacing: 8) {
-      Image(systemName: "info.circle")
+      Image(systemName: "waveform.circle.fill")
         .font(.system(size: metrics.bodyFont, weight: .medium))
-        .foregroundStyle(.white.opacity(0.45))
-      Text(t("LTC audio output is not yet available.", "LTC 音频输出暂未支持。"))
-        .font(.system(size: metrics.bodyFont, weight: .medium))
-        .foregroundStyle(.white.opacity(0.55))
-        .lineLimit(2)
-        .fixedSize(horizontal: false, vertical: true)
+        .foregroundStyle(.white.opacity(0.65))
+      VStack(alignment: .leading, spacing: 2) {
+        Text(t("LTC Audio Output", "LTC 音频输出"))
+          .font(.system(size: metrics.bodyFont, weight: .semibold))
+          .foregroundStyle(.white)
+        Text(ltcOut.statusText)
+          .font(.system(size: metrics.bodyFont - 1, weight: .regular))
+          .foregroundStyle(.white.opacity(0.55))
+          .lineLimit(1)
+      }
+      Spacer()
     }
     .padding(.horizontal, 12)
     .padding(.vertical, 9)
@@ -479,6 +496,78 @@ struct ContentView: View {
     .overlay(
       RoundedRectangle(cornerRadius: 10, style: .continuous)
         .strokeBorder(Color.white.opacity(0.09), lineWidth: 1)
+    )
+  }
+
+  private func ltcOutputDeviceMenu(metrics: LayoutMetrics) -> some View {
+    VStack(alignment: .leading, spacing: 6) {
+      Text(t("Audio Device:", "音频设备："))
+        .font(.system(size: metrics.bodyFont - 1, weight: .semibold))
+        .foregroundStyle(.white.opacity(0.65))
+        .padding(.horizontal, 12)
+
+      if ltcOut.devices.isEmpty {
+        HStack {
+          Image(systemName: "exclamationmark.circle")
+            .foregroundStyle(.white.opacity(0.4))
+          Text(t("No audio output devices found", "未找到音频输出设备"))
+            .font(.system(size: metrics.bodyFont - 1, weight: .regular))
+            .foregroundStyle(.white.opacity(0.5))
+          Spacer()
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+      } else {
+        Menu {
+          ForEach(ltcOut.devices, id: \.id) { device in
+            Button(device.name) {
+              ltcOut.selectedDeviceID = device.id
+            }
+          }
+        } label: {
+          HStack {
+            Image(systemName: "speaker.fill")
+              .font(.system(size: metrics.bodyFont, weight: .medium))
+              .foregroundStyle(.white.opacity(0.65))
+
+            Text(
+              ltcOut.devices.first(where: { $0.id == ltcOut.selectedDeviceID })?.name
+                ?? t("Select device", "选择设备")
+            )
+            .font(.system(size: metrics.bodyFont, weight: .regular))
+            .foregroundStyle(.white)
+            .lineLimit(1)
+
+            Spacer()
+
+            Image(systemName: "chevron.down")
+              .font(.system(size: 12, weight: .semibold))
+              .foregroundStyle(.white.opacity(0.42))
+          }
+          .padding(.horizontal, 12)
+          .padding(.vertical, 10)
+          .frame(maxWidth: .infinity, alignment: .leading)
+          .background(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+              .fill(Color.white.opacity(0.05))
+          )
+          .overlay(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+              .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
+          )
+        }
+        .padding(.horizontal, 12)
+      }
+    }
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .padding(.vertical, 10)
+    .background(
+      RoundedRectangle(cornerRadius: 10, style: .continuous)
+        .fill(Color.white.opacity(0.02))
+    )
+    .overlay(
+      RoundedRectangle(cornerRadius: 10, style: .continuous)
+        .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
     )
   }
 
@@ -1002,7 +1091,12 @@ struct ContentView: View {
   /// The clock runs at outputRate.fps × 4 Hz and sends QF nibbles on its own timer.
   private func feedOutputClock() {
     guard isRunning, let conversion else { return }
-    midiOut.updatePosition(tc: conversion.outputTimecode, rate: outputRate)
+    switch outputMode {
+    case .mtc:
+      midiOut.updatePosition(tc: conversion.outputTimecode, rate: outputRate)
+    case .ltc:
+      ltcOut.updateTimecode(conversion.outputTimecode, rate: outputRate)
+    }
   }
 }
 

@@ -87,6 +87,7 @@ swiftc -parse-as-library \
   "$ROOT_DIR/macapp/WindowSizer.swift" \
   "$ROOT_DIR/macapp/ContentView.swift" \
   "$ROOT_DIR/macapp/AudioLTCManager.swift" \
+  "$ROOT_DIR/macapp/AudioLTCOutputManager.swift" \
   "$ROOT_DIR/macapp/TimecodeMath.swift" \
   "$ROOT_DIR/macapp/MIDIManager.swift" \
   "$ROOT_DIR/macapp/MIDIOutputManager.swift" \
