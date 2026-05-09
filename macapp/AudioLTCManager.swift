@@ -26,9 +26,11 @@ final class AudioLTCManager: ObservableObject {
   private var isRunning = false
 
   // Rate auto-detection state (processingQueue only)
-  private var rateMaxFrame: Int = 0
-  private var rateFrameCount: Int = 0
   private var currentBestRate: FrameRateOption?
+  // Smoothed samples-per-frame (one-pole IIR), used to distinguish
+  // close-rate pairs (29.97 NDF vs 30, 23.976 vs 24) over time.
+  private var smoothedSPF: Double = 0
+  private var spfSampleCount: Int = 0
 
   private var decoder: LTCDecoderRef?
   private var audioFrameOffset: Int64 = 0
@@ -229,8 +231,18 @@ final class AudioLTCManager: ObservableObject {
     ageOutLockIfNeeded()
   }
 
-  /// Decode one LTC frame, auto-detecting frame rate from the Drop Frame bit and
-  /// the observed frame count. Returns nil if the raw data is malformed.
+  /// Decode one LTC frame and detect its frame rate.
+  ///
+  /// Rate detection combines three independent signals:
+  ///   1. SMPTE Drop-Frame bit (bit 10 of the LTC frame) → 29.97 DF (definitive)
+  ///   2. Audio sample period (off_end - off_start) → continuous fps measurement
+  ///   3. Frame number ≥ 25 → 30 fps hard guarantee (25 fps maxes at 24)
+  ///
+  /// The sample-period measurement gives a fully usable rate from the very first
+  /// frame because broadcast rates are well-separated at typical sample rates
+  /// (e.g. at 48 kHz: 25 fps = 1920 spf, 30 fps = 1600 spf, 24 fps = 2000 spf —
+  /// gaps of hundreds of samples). Close pairs (29.97 NDF vs 30, 23.976 vs 24)
+  /// are disambiguated by a smoothed average of the period over many frames.
   private func decodeFrame(_ frame: LTCFrameExt) -> (TimecodeValue, FrameRateOption)? {
     let raw = withUnsafeBytes(of: frame.ltc) { Array($0) }
     guard raw.count >= 10 else { return nil }
@@ -254,9 +266,14 @@ final class AudioLTCManager: ObservableObject {
 
     guard hours < 24, minutes < 60, seconds < 60 else { return nil }
 
-    // Auto-detect rate from DF bit and running max-frame observation.
-    let rate = inferRate(frames: frames, isDropFrame: isDropFrame)
-    guard let rate else { return nil }
+    // Measure this frame's actual duration in audio samples.
+    let durationSamples = abs(Double(frame.off_end - frame.off_start))
+
+    let rate = inferRate(
+      durationSamples: durationSamples,
+      frameNumber: frames,
+      isDropFrame: isDropFrame
+    )
 
     let delimiter: Character = isDropFrame ? ";" : ":"
     let tc = TimecodeValue(
@@ -267,37 +284,69 @@ final class AudioLTCManager: ObservableObject {
     return (tc, rate)
   }
 
-  /// Updates the running frame-count statistics and returns the current best-guess
-  /// rate once detection is confident, or nil while still accumulating evidence.
-  private func inferRate(frames: Int, isDropFrame: Bool) -> FrameRateOption? {
+  /// Picks the best-matching standard frame rate for this LTC frame.
+  ///
+  /// Algorithm:
+  ///   • Drop-frame bit set    → 29.97 DF (decisive)
+  ///   • Frame number ≥ 25     → 30 fps  (decisive: only 30 fps has frame ≥ 25)
+  ///   • Otherwise compare the measured samples-per-frame against each candidate
+  ///     rate's nominal samples-per-frame and pick the closest. A smoothed
+  ///     average is used so close pairs (30 vs 29.97 NDF, 24 vs 23.976) settle
+  ///     to the right value over a few frames; instantaneous detection still
+  ///     locks 25 / 30 / 24 from a single frame because their gaps are large.
+  ///
+  /// All five standard broadcast rates are candidates; we choose by minimum
+  /// absolute distance in samples-per-frame, which is rate-rate symmetric and
+  /// robust to small jitter.
+  private func inferRate(
+    durationSamples: Double,
+    frameNumber: Int,
+    isDropFrame: Bool
+  ) -> FrameRateOption {
+    // 1) DF bit is definitive — it can only be set at 29.97 DF.
     if isDropFrame {
       let rate = TimecodeMath.rate(id: "2997df", in: TimecodeMath.inputRates)
       currentBestRate = rate
       return rate
     }
 
-    rateFrameCount += 1
-    if frames > rateMaxFrame { rateMaxFrame = frames }
+    let fallback25 = TimecodeMath.rate(id: "25", in: TimecodeMath.inputRates)
+    let rate30     = TimecodeMath.rate(id: "30", in: TimecodeMath.inputRates)
 
-    // Definitive upper-bound detections (frame count proves a faster rate).
-    if rateMaxFrame >= 25 {
-      let rate = TimecodeMath.rate(id: "30", in: TimecodeMath.inputRates)
-      currentBestRate = rate
-      return rate
+    // 2) Frame ≥ 25 is only possible at 30 fps (25 fps maxes at frame 24).
+    if frameNumber >= 25 {
+      currentBestRate = rate30
+      return rate30
     }
-    if rateMaxFrame >= 24 {
-      let rate = TimecodeMath.rate(id: "25", in: TimecodeMath.inputRates)
-      currentBestRate = rate
-      return rate
+
+    // 3) Need a valid sample period and sample rate to measure.
+    guard durationSamples > 0, sampleRate > 0 else {
+      // No timing info yet — broadcast default.
+      if currentBestRate == nil { currentBestRate = fallback25 }
+      return currentBestRate ?? fallback25
     }
-    // After ~30 frames without seeing frame ≥ 24, conclude 24 fps
-    // (23.976 and 24 fps are indistinguishable from the data alone).
-    if rateFrameCount >= 30 {
-      let rate = TimecodeMath.rate(id: "24", in: TimecodeMath.inputRates)
-      currentBestRate = rate
-      return rate
+
+    // Update the smoothed samples-per-frame using a one-pole IIR.
+    // Fast attack on first samples, slower steady-state for stability.
+    if spfSampleCount == 0 {
+      smoothedSPF = durationSamples
+    } else {
+      let alpha: Double = spfSampleCount < 8 ? 0.35 : 0.10
+      smoothedSPF = (alpha * durationSamples) + ((1 - alpha) * smoothedSPF)
     }
-    return nil  // Still accumulating evidence
+    spfSampleCount = min(spfSampleCount + 1, 1_000_000)
+
+    // Pick the rate whose nominal samples-per-frame is closest to the
+    // smoothed measurement. Distinguishes 30 vs 29.97 NDF and 24 vs 23.976
+    // once smoothing has converged (few hundred ms), while 25/30/24 separate
+    // on the very first frame.
+    let candidates: [FrameRateOption] = TimecodeMath.inputRates.filter { $0.id != "2997df" }
+    let best = candidates.min {
+      abs((sampleRate / $0.fps) - smoothedSPF) < abs((sampleRate / $1.fps) - smoothedSPF)
+    } ?? fallback25
+
+    currentBestRate = best
+    return best
   }
 
   private func registerDecodedTimecode(_ timecode: TimecodeValue, rate: FrameRateOption) {
@@ -320,6 +369,9 @@ final class AudioLTCManager: ObservableObject {
         validFrameStreak = 0
         newConfidence = max(lockConfidence - 0.28, 0.0)
         goodDecode = false
+        // Large jump = likely source change; reset rate detection so the new
+        // signal can be identified fresh rather than inheriting the old rate.
+        resetRateDetection()
       } else {
         validFrameStreak = max(validFrameStreak - 1, 0)
         newConfidence = min(lockConfidence + 0.08, 1.0)
@@ -348,12 +400,22 @@ final class AudioLTCManager: ObservableObject {
     guard let lastGoodDecodeAt else { return }
     if Date().timeIntervalSince(lastGoodDecodeAt) > 0.55 {
       validFrameStreak = 0
+      // Signal gone — reset rate detection so the next incoming signal
+      // (possibly at a different frame rate) is identified from scratch.
+      resetRateDetection()
       mainQueue.async {
         self.isLocked = false
         self.lockConfidence = max(self.lockConfidence * 0.6, 0.0)
+        self.detectedRate = nil
         self.statusText = AppLanguageStore.text("Searching LTC", "正在搜索 LTC") + " \(self.deviceName(for: self.selectedDeviceID))"
       }
     }
+  }
+
+  private func resetRateDetection() {
+    smoothedSPF = 0
+    spfSampleCount = 0
+    currentBestRate = nil
   }
 
   private func rebuildDecoderLocked() {
@@ -367,8 +429,8 @@ final class AudioLTCManager: ObservableObject {
     lastGoodDecodeAt = nil
     lastDecodedFrames = nil
     validFrameStreak = 0
-    rateMaxFrame = 0
-    rateFrameCount = 0
+    smoothedSPF = 0
+    spfSampleCount = 0
     currentBestRate = nil
     if let decoder {
       ltc_decoder_queue_flush(decoder)
