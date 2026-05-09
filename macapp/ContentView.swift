@@ -67,7 +67,6 @@ struct ContentView: View {
   @StateObject private var audio = AudioLTCManager()
 
   @AppStorage(AppLanguageStore.storageKey) private var languageRaw = AppLanguage.english.rawValue
-  @AppStorage("inputRateID")  private var inputRateID: String  = "2997df"
   @AppStorage("outputRateID") private var outputRateID: String  = "2997df"
   @AppStorage("savedAudioDeviceID") private var savedAudioDeviceID: Int = 0
   @AppStorage("savedMIDISourceID")  private var savedMIDISourceID:  Int = 0
@@ -84,29 +83,29 @@ struct ContentView: View {
   private func t(_ english: String, _ chinese: String) -> String {
     language == .simplifiedChinese ? chinese : english
   }
-  private var inputRate: FrameRateOption {
-    TimecodeMath.rate(id: inputRateID, in: TimecodeMath.inputRates)
-  }
-
   private var outputRate: FrameRateOption {
     TimecodeMath.rate(id: outputRateID, in: TimecodeMath.outputRates)
   }
 
+  /// Rate used for display in the input panel footer.
+  private var displayInputRate: FrameRateOption? {
+    switch inputMode {
+    case .ltc: return audio.detectedRate
+    case .mtc: return midi.detectedRate
+    }
+  }
+
   private var sourceTimecode: TimecodeValue? {
     switch inputMode {
-    case .ltc:
-      return audio.receivedTimecode
-    case .mtc:
-      return midi.receivedTimecode
+    case .ltc: return audio.receivedTimecode
+    case .mtc: return midi.receivedTimecode
     }
   }
 
   private var sourceRate: FrameRateOption? {
     switch inputMode {
-    case .ltc:
-      return inputRate
-    case .mtc:
-      return midi.detectedRate
+    case .ltc: return audio.detectedRate   // nil until auto-detected
+    case .mtc: return midi.detectedRate
     }
   }
 
@@ -185,9 +184,6 @@ struct ContentView: View {
     }
     .onChange(of: inputMode) { _ in
       syncInputPipeline()
-    }
-    .onChange(of: inputRateID) { _ in
-      audio.setExpectedRate(inputRate)
     }
     .onChange(of: outputRateID) { _ in
       midiOut.updateRate(outputRate)
@@ -372,14 +368,6 @@ struct ContentView: View {
           )
         }
 
-        // LTC input frame-rate selector (MTC detects rate automatically)
-        if inputMode == .ltc {
-          VStack(alignment: .leading, spacing: 8) {
-            panelFieldTitle(t("EXPECTED RATE:", "预期帧率："), metrics: metrics)
-            inputRateStrip(metrics: metrics)
-          }
-        }
-
         signalSection(
           title: t("INPUT SIGNAL", "输入信号"),
           metrics: metrics,
@@ -388,7 +376,7 @@ struct ContentView: View {
 
         panelFooter(
           label: t("INPUT FRAME RATE:", "输入帧率："),
-          value: rateDisplay(inputRate),
+          value: rateDisplay(displayInputRate),
           accent: Color(red: 0.29, green: 1.0, blue: 0.33),
           subtext: inputStatusText,
           dots: .blue,
@@ -675,27 +663,6 @@ struct ContentView: View {
 
   private func refreshButton(metrics: LayoutMetrics, action: @escaping () -> Void) -> some View {
     RefreshButton(height: metrics.deviceButtonHeight, iconSize: max(11, metrics.smallFont), action: action)
-  }
-
-  private func inputRateStrip(metrics: LayoutMetrics) -> some View {
-    ScrollView(.horizontal, showsIndicators: false) {
-      HStack(spacing: 8) {
-        ForEach(TimecodeMath.inputRates, id: \.id) { rate in
-          RateChipButton(
-            label: rateDisplay(rate),
-            selected: inputRate.id == rate.id,
-            accentColor: Color(red: 0.27, green: 0.58, blue: 1.0),
-            fontSize: metrics.rateChipFont,
-            hPad: metrics.rateChipHPad,
-            vPad: metrics.rateChipVPad
-          ) {
-            inputRateID = rate.id
-          }
-        }
-      }
-      .frame(maxWidth: .infinity, alignment: .leading)
-    }
-    .frame(maxWidth: .infinity)
   }
 
   private func outputRateStrip(metrics: LayoutMetrics) -> some View {
@@ -1019,7 +986,6 @@ struct ContentView: View {
     switch inputMode {
     case .ltc:
       midi.disconnect()
-      audio.setExpectedRate(inputRate)
       audio.startMonitoring()
     case .mtc:
       audio.stopMonitoring()

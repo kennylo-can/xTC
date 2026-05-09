@@ -17,13 +17,18 @@ final class AudioLTCManager: ObservableObject {
   @Published var latencyEstimateMs: Double?
   @Published var isLocked: Bool = false
   @Published var lockConfidence: Double = 0
+  @Published var detectedRate: FrameRateOption?
 
   private let engine = AVAudioEngine()
   private let processingQueue = DispatchQueue(label: "xtc.audio.ltc")
   private let mainQueue = DispatchQueue.main
-  private var expectedRate: FrameRateOption = TimecodeMath.outputRates.first ?? FrameRateOption(id: "30", label: "30 fps", fps: 30, dropFrame: false, mtcRateCode: 3)
   private var sampleRate: Double = 48_000
   private var isRunning = false
+
+  // Rate auto-detection state (processingQueue only)
+  private var rateMaxFrame: Int = 0
+  private var rateFrameCount: Int = 0
+  private var currentBestRate: FrameRateOption?
 
   private var decoder: LTCDecoderRef?
   private var audioFrameOffset: Int64 = 0
@@ -60,14 +65,6 @@ final class AudioLTCManager: ObservableObject {
     }
   }
 
-  func setExpectedRate(_ rate: FrameRateOption) {
-    processingQueue.async { [weak self] in
-      guard let self else { return }
-      self.expectedRate = rate
-      self.rebuildDecoderLocked()
-    }
-  }
-
   func selectDevice(_ deviceID: AudioDeviceID) {
     selectedDeviceID = deviceID
     if isRunning {
@@ -86,12 +83,10 @@ final class AudioLTCManager: ObservableObject {
 
     let detectedSampleRate = engine.inputNode.inputFormat(forBus: 0).sampleRate
     let currentSampleRate = detectedSampleRate > 0 ? detectedSampleRate : 48_000
-    let currentRate = expectedRate
 
     processingQueue.async { [weak self] in
       guard let self else { return }
       self.sampleRate = currentSampleRate
-      self.expectedRate = currentRate
       self.rebuildDecoderLocked()
     }
 
@@ -206,11 +201,15 @@ final class AudioLTCManager: ObservableObject {
 
     var frame = LTCFrameExt()
     while ltc_decoder_read(decoder, &frame) > 0 {
-      if let timecode = decodeFrame(frame) {
-        registerDecodedTimecode(timecode)
+      if let (timecode, rate) = decodeFrame(frame) {
+        registerDecodedTimecode(timecode, rate: rate)
+        let publishRate = currentBestRate
         mainQueue.async {
           self.receivedTimecode = timecode
           self.lastReceivedAt = Date()
+          if let r = publishRate, r.id != self.detectedRate?.id {
+            self.detectedRate = r
+          }
         }
       }
     }
@@ -230,45 +229,79 @@ final class AudioLTCManager: ObservableObject {
     ageOutLockIfNeeded()
   }
 
-  private func decodeFrame(_ frame: LTCFrameExt) -> TimecodeValue? {
+  /// Decode one LTC frame, auto-detecting frame rate from the Drop Frame bit and
+  /// the observed frame count. Returns nil if the raw data is malformed.
+  private func decodeFrame(_ frame: LTCFrameExt) -> (TimecodeValue, FrameRateOption)? {
     let raw = withUnsafeBytes(of: frame.ltc) { Array($0) }
     guard raw.count >= 10 else { return nil }
 
-    func bcd(_ byte: UInt8, mask: UInt8) -> Int {
-      Int(byte & mask)
-    }
+    func bcd(_ byte: UInt8, mask: UInt8) -> Int { Int(byte & mask) }
 
-    let framesUnits = bcd(raw[0], mask: 0x0f)
-    let framesTens = bcd(raw[1], mask: 0x03)
+    let framesUnits  = bcd(raw[0], mask: 0x0f)
+    let framesTens   = bcd(raw[1], mask: 0x03)
+    let isDropFrame  = (raw[1] & 0x04) != 0      // SMPTE LTC bit 10 = Drop Frame flag
     let secondsUnits = bcd(raw[2], mask: 0x0f)
-    let secondsTens = bcd(raw[3], mask: 0x07)
+    let secondsTens  = bcd(raw[3], mask: 0x07)
     let minutesUnits = bcd(raw[4], mask: 0x0f)
-    let minutesTens = bcd(raw[5], mask: 0x07)
-    let hoursUnits = bcd(raw[6], mask: 0x0f)
-    let hoursTens = bcd(raw[7], mask: 0x03)
+    let minutesTens  = bcd(raw[5], mask: 0x07)
+    let hoursUnits   = bcd(raw[6], mask: 0x0f)
+    let hoursTens    = bcd(raw[7], mask: 0x03)
 
-    let hours = hoursTens * 10 + hoursUnits
+    let hours   = hoursTens   * 10 + hoursUnits
     let minutes = minutesTens * 10 + minutesUnits
     let seconds = secondsTens * 10 + secondsUnits
-    let frames = framesTens * 10 + framesUnits
+    let frames  = framesTens  * 10 + framesUnits
 
     guard hours < 24, minutes < 60, seconds < 60 else { return nil }
 
-    let delimiter: Character = expectedRate.dropFrame ? ";" : ":"
+    // Auto-detect rate from DF bit and running max-frame observation.
+    let rate = inferRate(frames: frames, isDropFrame: isDropFrame)
+    guard let rate else { return nil }
+
+    let delimiter: Character = isDropFrame ? ";" : ":"
     let tc = TimecodeValue(
-      negative: false,
-      hours: hours,
-      minutes: minutes,
-      seconds: seconds,
-      frames: frames,
-      delimiter: delimiter
+      negative: false, hours: hours, minutes: minutes,
+      seconds: seconds, frames: frames, delimiter: delimiter
     )
-    guard case .success = TimecodeMath.validate(tc, rate: expectedRate) else { return nil }
-    return tc
+    guard case .success = TimecodeMath.validate(tc, rate: rate) else { return nil }
+    return (tc, rate)
   }
 
-  private func registerDecodedTimecode(_ timecode: TimecodeValue) {
-    let absoluteFrames = TimecodeMath.timecodeToFrames(timecode, rate: expectedRate)
+  /// Updates the running frame-count statistics and returns the current best-guess
+  /// rate once detection is confident, or nil while still accumulating evidence.
+  private func inferRate(frames: Int, isDropFrame: Bool) -> FrameRateOption? {
+    if isDropFrame {
+      let rate = TimecodeMath.rate(id: "2997df", in: TimecodeMath.inputRates)
+      currentBestRate = rate
+      return rate
+    }
+
+    rateFrameCount += 1
+    if frames > rateMaxFrame { rateMaxFrame = frames }
+
+    // Definitive upper-bound detections (frame count proves a faster rate).
+    if rateMaxFrame >= 25 {
+      let rate = TimecodeMath.rate(id: "30", in: TimecodeMath.inputRates)
+      currentBestRate = rate
+      return rate
+    }
+    if rateMaxFrame >= 24 {
+      let rate = TimecodeMath.rate(id: "25", in: TimecodeMath.inputRates)
+      currentBestRate = rate
+      return rate
+    }
+    // After ~30 frames without seeing frame ≥ 24, conclude 24 fps
+    // (23.976 and 24 fps are indistinguishable from the data alone).
+    if rateFrameCount >= 30 {
+      let rate = TimecodeMath.rate(id: "24", in: TimecodeMath.inputRates)
+      currentBestRate = rate
+      return rate
+    }
+    return nil  // Still accumulating evidence
+  }
+
+  private func registerDecodedTimecode(_ timecode: TimecodeValue, rate: FrameRateOption) {
+    let absoluteFrames = TimecodeMath.timecodeToFrames(timecode, rate: rate)
     let now = Date()
     let newConfidence: Double
     let goodDecode: Bool
@@ -326,12 +359,17 @@ final class AudioLTCManager: ObservableObject {
   private func rebuildDecoderLocked() {
     releaseDecoder()
 
-    let apv = max(1, Int((sampleRate / expectedRate.fps).rounded()))
-    decoder = ltc_decoder_create(Int32(apv), 8)
+    // Use 24 fps APV — the largest standard value — so the decoder buffer is
+    // big enough for any frame rate (24 / 25 / 29.97 / 30 fps).
+    let apv = max(1, Int((sampleRate / 24.0).rounded()))
+    decoder = ltc_decoder_create(Int32(apv), 32)
     audioFrameOffset = 0
     lastGoodDecodeAt = nil
     lastDecodedFrames = nil
     validFrameStreak = 0
+    rateMaxFrame = 0
+    rateFrameCount = 0
+    currentBestRate = nil
     if let decoder {
       ltc_decoder_queue_flush(decoder)
     }
@@ -339,6 +377,7 @@ final class AudioLTCManager: ObservableObject {
     mainQueue.async {
       self.isLocked = false
       self.lockConfidence = 0
+      self.detectedRate = nil
     }
   }
 

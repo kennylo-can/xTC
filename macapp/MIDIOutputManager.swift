@@ -22,9 +22,13 @@ private final class MTCClock {
   private var baseDate: Date = Date()
   private var currentSeconds: Double = 0
   private var lastSentSeconds: Double?
+  private var lastPositionUpdate: Date?          // nil = no update received yet
   private var isRunning: Bool = false
   private var destination: MIDIEndpointRef?
   var outputPort: MIDIPortRef = 0   // set once from setupClient; read on queue
+
+  // Stop freewheeling after this many seconds with no updatePosition call.
+  private let staleTimeout: TimeInterval = 0.6
 
   init(queue: DispatchQueue) {
     self.queue = queue
@@ -76,6 +80,7 @@ private final class MTCClock {
       self.baseSeconds = newSeconds
       self.baseDate = now
       self.lastSentSeconds = newSeconds
+      self.lastPositionUpdate = now
 
       if isJump {
         self.piece = 0
@@ -108,11 +113,23 @@ private final class MTCClock {
     timer?.cancel()
     timer = nil
     isRunning = false
+    lastPositionUpdate = nil
+    lastSentSeconds = nil
   }
 
   private func tick() {
     guard isRunning, let rate = self.rate, lastSentSeconds != nil else { return }
-    // Snapshot TC once per 8-piece cycle so all nibbles encode the same frame
+
+    // If no updatePosition has arrived within the stale window, the input
+    // signal is gone — stop the clock so we don't freerun indefinitely.
+    if let last = lastPositionUpdate,
+       Date().timeIntervalSince(last) > staleTimeout {
+      stopInternal()
+      lastPositionUpdate = nil
+      return
+    }
+
+    // Snapshot TC once per 8-piece cycle so all nibbles encode the same frame.
     if piece == 0 {
       currentSeconds = baseSeconds + Date().timeIntervalSince(baseDate)
     }
