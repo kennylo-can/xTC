@@ -26,6 +26,7 @@ private final class MTCClock {
   private var isRunning: Bool = false
   private var destination: MIDIEndpointRef?
   var outputPort: MIDIPortRef = 0   // set once from setupClient; read on queue
+  private var cachedQF: [[UInt8]] = []
 
   // Stop freewheeling after this many seconds with no updatePosition call.
   private let staleTimeout: TimeInterval = 0.6
@@ -58,6 +59,7 @@ private final class MTCClock {
       if wasRunning { self.stopInternal() }
       self.rate = newRate
       self.lastSentSeconds = nil    // force Full Frame on next updatePosition
+      self.cachedQF = []
       if wasRunning { self.startInternal(rate: newRate) }
     }
   }
@@ -85,6 +87,7 @@ private final class MTCClock {
       if isJump {
         self.piece = 0
         self.currentSeconds = newSeconds
+        self.cachedQF = []
         self.sendFullFrame(tc: tc, rate: rate)
       }
 
@@ -115,6 +118,7 @@ private final class MTCClock {
     isRunning = false
     lastPositionUpdate = nil
     lastSentSeconds = nil
+    cachedQF = []
   }
 
   private func tick() {
@@ -132,16 +136,13 @@ private final class MTCClock {
     // Snapshot TC once per 8-piece cycle so all nibbles encode the same frame.
     if piece == 0 {
       currentSeconds = baseSeconds + Date().timeIntervalSince(baseDate)
+      let tc = TimecodeMath.secondsToTimecode(currentSeconds, rate: rate)
+      cachedQF = TimecodeMath.mtcQuarterFrameBytes(tc, rate: rate)
     }
-    let tc = TimecodeMath.secondsToTimecode(currentSeconds, rate: rate)
-    sendQF(piece: piece, tc: tc, rate: rate)
+    if piece < cachedQF.count {
+      sendRaw(cachedQF[piece])
+    }
     piece = (piece + 1) % 8
-  }
-
-  private func sendQF(piece: Int, tc: TimecodeValue, rate: FrameRateOption) {
-    let all = TimecodeMath.mtcQuarterFrameBytes(tc, rate: rate)
-    guard piece < all.count else { return }
-    sendRaw(all[piece])
   }
 
   private func sendFullFrame(tc: TimecodeValue, rate: FrameRateOption) {

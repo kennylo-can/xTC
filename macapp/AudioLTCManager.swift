@@ -167,10 +167,18 @@ final class AudioLTCManager: ObservableObject {
       let frameCount = Int(buffer.frameLength)
       guard frameCount > 0 else { return }
       guard let channel = buffer.floatChannelData?[0] else { return }
-      let copiedSamples = Array(UnsafeBufferPointer(start: channel, count: frameCount))
+      var energy: Double = 0
+      let copiedSamples = [Float](unsafeUninitializedCapacity: frameCount) { ptr, initializedCount in
+        for i in 0..<frameCount {
+          let sample = channel[i]
+          ptr[i] = sample
+          energy += Double(sample * sample)
+        }
+        initializedCount = frameCount
+      }
 
       self.processingQueue.async { [weak self] in
-        self?.process(samples: copiedSamples)
+        self?.process(samples: copiedSamples, precomputedEnergy: energy, frameCount: frameCount)
       }
     }
 
@@ -186,11 +194,8 @@ final class AudioLTCManager: ObservableObject {
     }
   }
 
-  private func process(samples: [Float]) {
+  private func process(samples: [Float], precomputedEnergy: Double, frameCount: Int) {
     guard !samples.isEmpty else { return }
-
-    let frameCount = samples.count
-    var energy = 0.0
 
     guard let decoder else { return }
 
@@ -216,11 +221,7 @@ final class AudioLTCManager: ObservableObject {
       }
     }
 
-    for sample in samples {
-      energy += Double(sample * sample)
-    }
-
-    let rms = frameCount > 0 ? sqrt(energy / Double(frameCount)) : 0
+    let rms = sqrt(precomputedEnergy / Double(frameCount))
     let normalized = min(max(rms * 3.4, 0), 1)
     let estimatedLatencyMs = ((Double(frameCount) / sampleRate) * 1000.0) / 2.0
     mainQueue.async {
