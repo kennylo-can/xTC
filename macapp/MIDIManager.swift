@@ -1,9 +1,15 @@
 import Foundation
 import CoreMIDI
+import CoreAudio
 
 struct MIDISourceItem: Identifiable, Hashable {
   let id: Int32
   let name: String
+}
+
+private struct MIDIPacketCapture {
+  let bytes: [UInt8]
+  let capturedAt: Date
 }
 
 @MainActor
@@ -23,6 +29,12 @@ final class MIDIManager: ObservableObject {
 
   // Quarter-frame accumulation — only accessed from MainActor
   private var quarterFrames: [UInt8?] = Array(repeating: nil, count: 8)
+  private var quarterFrameLocked = false
+  private var lastQuarterPiece: Int?
+  private var stableAnchorFrames: Int?
+  private var stableAnchorAt: Date?
+  private var stableRateID: String?
+  private var unstableCandidateCount: Int = 0
 
   init() {
     setupClient()
@@ -75,11 +87,24 @@ final class MIDIManager: ObservableObject {
       MIDIPortDisconnectSource(inputPort, endpoint)
       connectedSource = nil
     }
+    quarterFrames = Array(repeating: nil, count: 8)
+    quarterFrameLocked = false
+    lastQuarterPiece = nil
+    stableAnchorFrames = nil
+    stableAnchorAt = nil
+    stableRateID = nil
+    unstableCandidateCount = 0
     listeningState = AppLanguageStore.text("Disconnected", "未连接")
   }
 
   func clear() {
     quarterFrames = Array(repeating: nil, count: 8)
+    quarterFrameLocked = false
+    lastQuarterPiece = nil
+    stableAnchorFrames = nil
+    stableAnchorAt = nil
+    stableRateID = nil
+    unstableCandidateCount = 0
     detectedRate = nil
     receivedTimecode = nil
     latencyEstimateMs = nil
@@ -108,8 +133,8 @@ final class MIDIManager: ObservableObject {
     let portStatus = MIDIInputPortCreateWithBlock(client, "xTCInput" as CFString, &inputPort) { [weak self] packetList, _ in
       let extracted = MIDIManager.extractPackets(from: packetList)
       Task { @MainActor [weak self] in
-        for bytes in extracted {
-          self?.process(bytes: bytes)
+        for capture in extracted {
+          self?.process(bytes: capture.bytes, capturedAt: capture.capturedAt)
         }
       }
     }
@@ -121,23 +146,41 @@ final class MIDIManager: ObservableObject {
 
   // MARK: - Packet extraction (called on CoreMIDI thread — must be static/nonisolated)
 
-  private static func extractPackets(from packetList: UnsafePointer<MIDIPacketList>) -> [[UInt8]] {
-    var result: [[UInt8]] = []
+  private static func extractPackets(from packetList: UnsafePointer<MIDIPacketList>) -> [MIDIPacketCapture] {
+    var result: [MIDIPacketCapture] = []
+    let nowDate = Date()
+    let nowHostTime = AudioGetCurrentHostTime()
     let pointer = UnsafeMutablePointer(mutating: packetList)
     var packet = pointer.pointee.packet
     for _ in 0..<packetList.pointee.numPackets {
       let bytes = withUnsafeBytes(of: packet.data) { rawBuffer in
         Array(rawBuffer.prefix(Int(packet.length)))
       }
-      result.append(bytes)
+      let capturedAt = captureDate(for: packet.timeStamp, nowDate: nowDate, nowHostTime: nowHostTime)
+      result.append(MIDIPacketCapture(bytes: bytes, capturedAt: capturedAt))
       packet = MIDIPacketNext(&packet).pointee
     }
     return result
   }
 
+  private static func captureDate(for hostTime: MIDITimeStamp, nowDate: Date, nowHostTime: UInt64) -> Date {
+    // Zero timestamp means "now" in many CoreMIDI sources.
+    if hostTime == 0 {
+      return nowDate
+    }
+
+    if hostTime >= nowHostTime {
+      let deltaNanos = AudioConvertHostTimeToNanos(hostTime - nowHostTime)
+      return nowDate.addingTimeInterval(Double(deltaNanos) / 1_000_000_000.0)
+    }
+
+    let deltaNanos = AudioConvertHostTimeToNanos(nowHostTime - hostTime)
+    return nowDate.addingTimeInterval(-Double(deltaNanos) / 1_000_000_000.0)
+  }
+
   // MARK: - Packet processing (MainActor)
 
-  private func process(bytes: [UInt8]) {
+  private func process(bytes: [UInt8], capturedAt: Date) {
     guard let status = bytes.first else { return }
 
     switch status {
@@ -146,9 +189,16 @@ final class MIDIManager: ObservableObject {
       let piece = Int(data >> 4)
       guard piece < 8 else { return }
       quarterFrames[piece] = data & 0x0f
-      if piece == 7 {
-        decodeQuarterFrames()
+      if quarterFrames.allSatisfy({ $0 != nil }) {
+        quarterFrameLocked = true
       }
+
+      // Decode only on continuous QF sequence to avoid mixing stale/new nibbles,
+      // which can cause visible timeline twitching.
+      if quarterFrameLocked && shouldDecodeRollingQuarterFrame(for: piece) {
+        decodeQuarterFrames(capturedAt: capturedAt)
+      }
+      lastQuarterPiece = piece
 
     case 0xF0:
       guard bytes.count >= 10,
@@ -158,14 +208,14 @@ final class MIDIManager: ObservableObject {
             bytes[4] == 0x01,
             bytes.last == 0xf7
       else { return }
-      decodeFullFrame(bytes)
+      decodeFullFrame(bytes, capturedAt: capturedAt)
 
     default:
       break
     }
   }
 
-  private func decodeQuarterFrames() {
+  private func decodeQuarterFrames(capturedAt: Date) {
     guard quarterFrames.allSatisfy({ $0 != nil }),
           let f0 = quarterFrames[0], let f1 = quarterFrames[1],
           let f2 = quarterFrames[2], let f3 = quarterFrames[3],
@@ -206,15 +256,13 @@ final class MIDIManager: ObservableObject {
       delimiter: rate.dropFrame ? ";" : ":"
     )
 
-    detectedRate = rate
-    receivedTimecode = tc
-    lastReceivedAt = Date()
+    publishStableQuarterFrame(candidate: tc, rate: rate, capturedAt: capturedAt)
     latencyEstimateMs = 0.5
     lastMessage = AppLanguageStore.text("Quarter Frame", "Quarter Frame")
     listeningState = AppLanguageStore.text("Received MTC", "收到 MTC") + " \(rate.label)"
   }
 
-  private func decodeFullFrame(_ bytes: [UInt8]) {
+  private func decodeFullFrame(_ bytes: [UInt8], capturedAt: Date) {
     guard bytes.count >= 10 else { return }
     let rateCode = Int((bytes[5] >> 5) & 0x03)
     let hours    = Int(bytes[5] & 0x1f)
@@ -234,13 +282,82 @@ final class MIDIManager: ObservableObject {
 
     detectedRate = rate
     receivedTimecode = tc
-    lastReceivedAt = Date()
+    lastReceivedAt = capturedAt
     latencyEstimateMs = 0.2
     lastMessage = AppLanguageStore.text("Full Frame", "Full Frame")
     listeningState = AppLanguageStore.text("Received MTC", "收到 MTC") + " \(rate.label)"
 
     // Full Frame is a locate/jump event — reset QF accumulator
     quarterFrames = Array(repeating: nil, count: 8)
+    quarterFrameLocked = false
+    lastQuarterPiece = nil
+    stableAnchorFrames = TimecodeMath.timecodeToFrames(tc, rate: rate)
+    stableAnchorAt = capturedAt
+    stableRateID = rate.id
+    unstableCandidateCount = 0
+  }
+
+  private func shouldDecodeRollingQuarterFrame(for piece: Int) -> Bool {
+    guard let lastQuarterPiece else { return piece == 7 }
+    if piece == lastQuarterPiece { return false }
+    let expected = (lastQuarterPiece + 1) & 0x07
+    return piece == expected
+  }
+
+  private func publishStableQuarterFrame(candidate: TimecodeValue, rate: FrameRateOption, capturedAt: Date) {
+    let candidateFrames = TimecodeMath.timecodeToFrames(candidate, rate: rate)
+    let dayFrames = max(1, Int((rate.fps * 86_400.0).rounded()))
+
+    if stableRateID != rate.id || stableAnchorFrames == nil || stableAnchorAt == nil {
+      stableRateID = rate.id
+      stableAnchorFrames = candidateFrames
+      stableAnchorAt = capturedAt
+      unstableCandidateCount = 0
+      detectedRate = rate
+      receivedTimecode = candidate
+      lastReceivedAt = capturedAt
+      return
+    }
+
+    guard let anchorFrames = stableAnchorFrames, let anchorAt = stableAnchorAt else { return }
+    let elapsed = max(0, capturedAt.timeIntervalSince(anchorAt))
+    let predictedAdvance = Int((elapsed * rate.fps).rounded())
+    let predictedFrames = normalizedFrameCount(anchorFrames + predictedAdvance, dayFrames: dayFrames)
+
+    var delta = candidateFrames - predictedFrames
+    if delta > dayFrames / 2 { delta -= dayFrames }
+    if delta < -(dayFrames / 2) { delta += dayFrames }
+
+    if abs(delta) <= 2 {
+      stableAnchorFrames = candidateFrames
+      stableAnchorAt = capturedAt
+      unstableCandidateCount = 0
+      detectedRate = rate
+      receivedTimecode = candidate
+      lastReceivedAt = capturedAt
+      return
+    }
+
+    unstableCandidateCount += 1
+    if unstableCandidateCount >= 8 {
+      stableAnchorFrames = candidateFrames
+      stableAnchorAt = capturedAt
+      unstableCandidateCount = 0
+      detectedRate = rate
+      receivedTimecode = candidate
+      lastReceivedAt = capturedAt
+      return
+    }
+
+    let stabilizedTC = TimecodeMath.secondsToTimecode(Double(predictedFrames) / rate.fps, rate: rate)
+    detectedRate = rate
+    receivedTimecode = stabilizedTC
+    lastReceivedAt = capturedAt
+  }
+
+  private func normalizedFrameCount(_ value: Int, dayFrames: Int) -> Int {
+    let wrapped = value % dayFrames
+    return wrapped >= 0 ? wrapped : wrapped + dayFrames
   }
 
   // MARK: - CoreMIDI helpers

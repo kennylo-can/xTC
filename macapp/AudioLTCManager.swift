@@ -167,6 +167,7 @@ final class AudioLTCManager: ObservableObject {
       let frameCount = Int(buffer.frameLength)
       guard frameCount > 0 else { return }
       guard let channel = buffer.floatChannelData?[0] else { return }
+      let capturedAt = Date()
       var energy: Double = 0
       let copiedSamples = [Float](unsafeUninitializedCapacity: frameCount) { ptr, initializedCount in
         for i in 0..<frameCount {
@@ -178,7 +179,12 @@ final class AudioLTCManager: ObservableObject {
       }
 
       self.processingQueue.async { [weak self] in
-        self?.process(samples: copiedSamples, precomputedEnergy: energy, frameCount: frameCount)
+        self?.process(
+          samples: copiedSamples,
+          precomputedEnergy: energy,
+          frameCount: frameCount,
+          capturedAt: capturedAt
+        )
       }
     }
 
@@ -194,7 +200,12 @@ final class AudioLTCManager: ObservableObject {
     }
   }
 
-  private func process(samples: [Float], precomputedEnergy: Double, frameCount: Int) {
+  private func process(
+    samples: [Float],
+    precomputedEnergy: Double,
+    frameCount: Int,
+    capturedAt: Date
+  ) {
     guard !samples.isEmpty else { return }
 
     guard let decoder else { return }
@@ -213,7 +224,7 @@ final class AudioLTCManager: ObservableObject {
         let publishRate = currentBestRate
         mainQueue.async {
           self.receivedTimecode = timecode
-          self.lastReceivedAt = Date()
+          self.lastReceivedAt = capturedAt
           if let r = publishRate, r.id != self.detectedRate?.id {
             self.detectedRate = r
           }

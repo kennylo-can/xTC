@@ -1,280 +1,348 @@
-#include "decoder.h"
+/*
+   libltc - en+decode linear timecode
 
-#include <math.h>
-#include <stdlib.h>
-#include <string.h>
+   Copyright (C) 2005 Maarten de Boer <mdeboer@iua.upf.es>
+   Copyright (C) 2006-2022 Robin Gareus <robin@gareus.org>
+   Copyright (C) 2008-2009 Jan <jan@geheimwerk.de>
 
+   Binary constant generator macro for endianess conversion
+   by Tom Torfs - donated to the public domain
+
+   This program is free software; you can redistribute it and/or modify
+   it under the terms of the GNU Lesser General Public License as
+   published by the Free Software Foundation, either version 3 of the
+   License, or (at your option) any later version.
+
+   This program is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU Lesser General Public License for more details.
+
+   You should have received a copy of the GNU Lesser General Public
+   License along with this library.
+   If not, see <http://www.gnu.org/licenses/>.
+*/
+
+/** turn a numeric literal into a hex constant
+ *  (avoids problems with leading zeroes)
+ *  8-bit constants max value 0x11111111, always fits in unsigned long
+ */
 #define HEX__(n) 0x##n##LU
-#define B8__(x) ((x&0x0000000FLU)?1:0) \
-	+((x&0x000000F0LU)?2:0) \
-	+((x&0x00000F00LU)?4:0) \
-	+((x&0x0000F000LU)?8:0) \
+
+/**
+ * 8-bit conversion function
+ */
+#define B8__(x) ((x&0x0000000FLU)?1:0)	\
+	+((x&0x000000F0LU)?2:0)	 \
+	+((x&0x00000F00LU)?4:0)	 \
+	+((x&0x0000F000LU)?8:0)	 \
 	+((x&0x000F0000LU)?16:0) \
 	+((x&0x00F00000LU)?32:0) \
 	+((x&0x0F000000LU)?64:0) \
 	+((x&0xF0000000LU)?128:0)
+
+/** for upto 8-bit binary constants */
 #define B8(d) ((unsigned char)B8__(HEX__(d)))
+
+/** for upto 16-bit binary constants, MSB first */
 #define B16(dmsb,dlsb) (((unsigned short)B8(dmsb)<<8) + B8(dlsb))
 
-static double calc_volume_db(LTCDecoderRef d) {
-  if (d->snd_to_biphase_max <= d->snd_to_biphase_min) {
-    return -INFINITY;
-  }
-  return 20.0 * log10((d->snd_to_biphase_max - d->snd_to_biphase_min) / 255.0);
+/** turn a numeric literal into a hex constant
+ *(avoids problems with leading zeroes)
+ * 8-bit constants max value 0x11111111, always fits in unsigned long
+ */
+#define HEX__(n) 0x##n##LU
+
+/** 8-bit conversion function */
+#define B8__(x) ((x&0x0000000FLU)?1:0)	\
+	+((x&0x000000F0LU)?2:0)  \
+	+((x&0x00000F00LU)?4:0)  \
+	+((x&0x0000F000LU)?8:0)  \
+	+((x&0x000F0000LU)?16:0) \
+	+((x&0x00F00000LU)?32:0) \
+	+((x&0x0F000000LU)?64:0) \
+	+((x&0xF0000000LU)?128:0)
+
+
+/** for upto 8-bit binary constants */
+#define B8(d) ((unsigned char)B8__(HEX__(d)))
+
+/** for upto 16-bit binary constants, MSB first */
+#define B16(dmsb,dlsb) (((unsigned short)B8(dmsb)<<8) + B8(dlsb))
+
+/* Example usage:
+ * B8(01010101) = 85
+ * B16(10101010,01010101) = 43605
+ */
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <math.h>
+
+#include "decoder.h"
+
+#define DEBUG_DUMP(msg, f) \
+{ \
+	int _ii; \
+	printf("%s", msg); \
+	for (_ii=0; _ii < (LTC_FRAME_BIT_COUNT >> 3); _ii++) { \
+		const unsigned char _bit = ((unsigned char*)(f))[_ii]; \
+		printf("%c", (_bit & B8(10000000) ) ? '1' : '0'); \
+		printf("%c", (_bit & B8(01000000) ) ? '1' : '0'); \
+		printf("%c", (_bit & B8(00100000) ) ? '1' : '0'); \
+		printf("%c", (_bit & B8(00010000) ) ? '1' : '0'); \
+		printf("%c", (_bit & B8(00001000) ) ? '1' : '0'); \
+		printf("%c", (_bit & B8(00000100) ) ? '1' : '0'); \
+		printf("%c", (_bit & B8(00000010) ) ? '1' : '0'); \
+		printf("%c", (_bit & B8(00000001) ) ? '1' : '0'); \
+		printf(" "); \
+	}\
+	printf("\n"); \
 }
 
-static void parse_ltc(LTCDecoderRef d, unsigned char bit, ltc_off_t offset, ltc_off_t posinfo) {
-  if (d->bit_cnt == 0) {
-    memset(&d->ltc_frame, 0, sizeof(LTCFrame));
-    if (d->frame_start_prev < 0) {
-      d->frame_start_off = posinfo - d->snd_to_biphase_period;
-    } else {
-      d->frame_start_off = d->frame_start_prev;
-    }
-  }
-  d->frame_start_prev = offset + posinfo;
+#if (defined _MSC_VER && _MSC_VER <= 1800)
+#define inline __inline
+#endif
 
-  if (d->bit_cnt >= LTC_FRAME_BIT_COUNT) {
-    int k;
-    const int byte_num_max = LTC_FRAME_BIT_COUNT >> 3;
-    for (k = 0; k < byte_num_max; k++) {
-      const unsigned char bi = ((unsigned char *)&d->ltc_frame)[k];
-      unsigned char bo = 0;
-      bo |= (bi & B8(10000000)) ? B8(01000000) : 0;
-      bo |= (bi & B8(01000000)) ? B8(00100000) : 0;
-      bo |= (bi & B8(00100000)) ? B8(00010000) : 0;
-      bo |= (bi & B8(00010000)) ? B8(00001000) : 0;
-      bo |= (bi & B8(00001000)) ? B8(00000100) : 0;
-      bo |= (bi & B8(00000100)) ? B8(00000010) : 0;
-      bo |= (bi & B8(00000010)) ? B8(00000001) : 0;
-      if (k + 1 < byte_num_max) {
-        bo |= ((((unsigned char *)&d->ltc_frame)[k + 1]) & B8(00000001)) ? B8(10000000) : B8(00000000);
-      }
-      ((unsigned char *)&d->ltc_frame)[k] = bo;
-    }
+#if (!defined INFINITY && defined _MSC_VER)
+#define INFINITY std::numeric_limits<double>::infinity()
+#endif
+#if (!defined INFINITY && defined HUGE_VAL)
+#define INFINITY HUGE_VAL
+#endif
 
-    d->frame_start_off += ceil(d->snd_to_biphase_period);
-    d->bit_cnt--;
-  }
-
-  d->decoder_sync_word <<= 1;
-  if (bit) {
-    d->decoder_sync_word |= B16(00000000,00000001);
-
-    if (d->bit_cnt < LTC_FRAME_BIT_COUNT) {
-      const int bit_num = (d->bit_cnt & B8(00000111));
-      const int bit_set = (B8(00000001) << bit_num);
-      const int byte_num = d->bit_cnt >> 3;
-      ((unsigned char *)&d->ltc_frame)[byte_num] |= bit_set;
-    }
-  }
-  d->bit_cnt++;
-
-  if (d->decoder_sync_word == B16(00111111,11111101)) {
-    if (d->bit_cnt == LTC_FRAME_BIT_COUNT) {
-      int bc;
-      if (d->queue_write_off == d->queue_len) {
-        d->queue_write_off = 0;
-      }
-      memcpy(&d->queue[d->queue_write_off].ltc, &d->ltc_frame, sizeof(LTCFrame));
-      for (bc = 0; bc < LTC_FRAME_BIT_COUNT; ++bc) {
-        const int btc = (d->biphase_tic + bc) % LTC_FRAME_BIT_COUNT;
-        d->queue[d->queue_write_off].biphase_tics[bc] = d->biphase_tics[btc];
-      }
-      d->queue[d->queue_write_off].off_start = d->frame_start_off;
-      d->queue[d->queue_write_off].off_end = posinfo + (ltc_off_t)offset - 1LL;
-      d->queue[d->queue_write_off].reverse = 0;
-      d->queue[d->queue_write_off].volume = calc_volume_db(d);
-      d->queue[d->queue_write_off].sample_min = d->snd_to_biphase_min;
-      d->queue[d->queue_write_off].sample_max = d->snd_to_biphase_max;
-      d->queue_write_off++;
-    }
-    d->bit_cnt = 0;
-  }
-
-  if (d->decoder_sync_word == B16(10111111,11111100)) {
-    if (d->bit_cnt == LTC_FRAME_BIT_COUNT) {
-      int bc;
-      int k;
-      int byte_num_max = LTC_FRAME_BIT_COUNT >> 3;
-      for (k = 0; k < byte_num_max; k++) {
-        const unsigned char bi = ((unsigned char *)&d->ltc_frame)[k];
-        unsigned char bo = 0;
-        bo |= (bi & B8(10000000)) ? B8(00000001) : 0;
-        bo |= (bi & B8(01000000)) ? B8(00000010) : 0;
-        bo |= (bi & B8(00100000)) ? B8(00000100) : 0;
-        bo |= (bi & B8(00010000)) ? B8(00001000) : 0;
-        bo |= (bi & B8(00001000)) ? B8(00010000) : 0;
-        bo |= (bi & B8(00000100)) ? B8(00100000) : 0;
-        bo |= (bi & B8(00000010)) ? B8(01000000) : 0;
-        bo |= (bi & B8(00000001)) ? B8(10000000) : 0;
-        ((unsigned char *)&d->ltc_frame)[k] = bo;
-      }
-
-      byte_num_max -= 2;
-      for (k = 0; k < (byte_num_max) / 2; k++) {
-        const unsigned char bi = ((unsigned char *)&d->ltc_frame)[k];
-        ((unsigned char *)&d->ltc_frame)[k] = ((unsigned char *)&d->ltc_frame)[byte_num_max - 1 - k];
-        ((unsigned char *)&d->ltc_frame)[byte_num_max - 1 - k] = bi;
-      }
-
-      if (d->queue_write_off == d->queue_len) {
-        d->queue_write_off = 0;
-      }
-      memcpy(&d->queue[d->queue_write_off].ltc, &d->ltc_frame, sizeof(LTCFrame));
-      for (bc = 0; bc < LTC_FRAME_BIT_COUNT; ++bc) {
-        const int btc = (d->biphase_tic + bc) % LTC_FRAME_BIT_COUNT;
-        d->queue[d->queue_write_off].biphase_tics[bc] = d->biphase_tics[btc];
-      }
-      d->queue[d->queue_write_off].off_start = d->frame_start_off - 16 * d->snd_to_biphase_period;
-      d->queue[d->queue_write_off].off_end = posinfo + (ltc_off_t)offset - 1LL - 16 * d->snd_to_biphase_period;
-      d->queue[d->queue_write_off].reverse = (LTC_FRAME_BIT_COUNT >> 3) * 8 * d->snd_to_biphase_period;
-      d->queue[d->queue_write_off].volume = calc_volume_db(d);
-      d->queue[d->queue_write_off].sample_min = d->snd_to_biphase_min;
-      d->queue[d->queue_write_off].sample_max = d->snd_to_biphase_max;
-      d->queue_write_off++;
-    }
-    d->bit_cnt = 0;
-  }
+static double calc_volume_db(LTCDecoder *d) {
+	if (d->snd_to_biphase_max <= d->snd_to_biphase_min)
+		return -INFINITY;
+	return (20.0 * log10((d->snd_to_biphase_max - d->snd_to_biphase_min) / 255.0));
 }
 
-static inline void biphase_decode2(LTCDecoderRef d, ltc_off_t offset, ltc_off_t pos) {
-  d->biphase_tics[d->biphase_tic] = d->snd_to_biphase_period;
-  d->biphase_tic = (d->biphase_tic + 1) % LTC_FRAME_BIT_COUNT;
-  if (d->snd_to_biphase_cnt <= 2 * d->snd_to_biphase_period) {
-    pos -= (d->snd_to_biphase_period - d->snd_to_biphase_cnt);
-  }
+static void parse_ltc(LTCDecoder *d, unsigned char bit, ltc_off_t offset, ltc_off_t posinfo) {
+	int bit_num, bit_set, byte_num;
 
-  if (d->snd_to_biphase_state == d->biphase_prev) {
-    d->biphase_state = 1;
-    parse_ltc(d, 0, offset, pos);
-  } else {
-    d->biphase_state = 1 - d->biphase_state;
-    if (d->biphase_state == 1) {
-      parse_ltc(d, 1, offset, pos);
-    }
-  }
-  d->biphase_prev = d->snd_to_biphase_state;
+	if (d->bit_cnt == 0) {
+		memset(&d->ltc_frame, 0, sizeof(LTCFrame));
+
+		if (d->frame_start_prev < 0) {
+			d->frame_start_off = posinfo - d->snd_to_biphase_period;
+		} else {
+			d->frame_start_off = d->frame_start_prev;
+		}
+	}
+	d->frame_start_prev = offset + posinfo;
+
+	if (d->bit_cnt >= LTC_FRAME_BIT_COUNT) {
+		/* shift bits backwards */
+		int k = 0;
+		const int byte_num_max = LTC_FRAME_BIT_COUNT >> 3;
+
+		for (k=0; k< byte_num_max; k++) {
+			const unsigned char bi = ((unsigned char*)&d->ltc_frame)[k];
+			unsigned char bo = 0;
+			bo |= (bi & B8(10000000) ) ? B8(01000000) : 0;
+			bo |= (bi & B8(01000000) ) ? B8(00100000) : 0;
+			bo |= (bi & B8(00100000) ) ? B8(00010000) : 0;
+			bo |= (bi & B8(00010000) ) ? B8(00001000) : 0;
+			bo |= (bi & B8(00001000) ) ? B8(00000100) : 0;
+			bo |= (bi & B8(00000100) ) ? B8(00000010) : 0;
+			bo |= (bi & B8(00000010) ) ? B8(00000001) : 0;
+			if (k+1 < byte_num_max) {
+				bo |= ( (((unsigned char*)&d->ltc_frame)[k+1]) & B8(00000001) ) ? B8(10000000): B8(00000000);
+			}
+			((unsigned char*)&d->ltc_frame)[k] = bo;
+		}
+
+		d->frame_start_off += ceil(d->snd_to_biphase_period);
+		d->bit_cnt--;
+	}
+
+	d->decoder_sync_word <<= 1;
+	if (bit) {
+
+		d->decoder_sync_word |= B16(00000000,00000001);
+
+		if (d->bit_cnt < LTC_FRAME_BIT_COUNT) {
+			// Isolating the lowest three bits: the location of this bit in the current byte
+			bit_num = (d->bit_cnt & B8(00000111));
+			// Using the bit number to define which of the eight bits to set
+			bit_set = (B8(00000001) << bit_num);
+			// Isolating the higher bits: the number of the byte/char the target bit is contained in
+			byte_num = d->bit_cnt >> 3;
+
+			(((unsigned char*)&d->ltc_frame)[byte_num]) |= bit_set;
+		}
+
+	}
+	d->bit_cnt++;
+
+	if (d->decoder_sync_word == B16(00111111,11111101) /*LTC Sync Word 0x3ffd*/) {
+		if (d->bit_cnt == LTC_FRAME_BIT_COUNT) {
+			int bc;
+
+			if (d->queue_write_off == d->queue_len) {
+				d->queue_write_off = 0;
+			}
+
+			memcpy( &d->queue[d->queue_write_off].ltc,
+				&d->ltc_frame,
+				sizeof(LTCFrame));
+
+			for(bc = 0; bc < LTC_FRAME_BIT_COUNT; ++bc) {
+				const int btc = (d->biphase_tic + bc ) % LTC_FRAME_BIT_COUNT;
+				d->queue[d->queue_write_off].biphase_tics[bc] = d->biphase_tics[btc];
+			}
+
+			d->queue[d->queue_write_off].off_start = d->frame_start_off;
+			d->queue[d->queue_write_off].off_end = posinfo + (ltc_off_t) offset - 1LL;
+			d->queue[d->queue_write_off].reverse = 0;
+			d->queue[d->queue_write_off].volume = calc_volume_db(d);
+			d->queue[d->queue_write_off].sample_min = d->snd_to_biphase_min;
+			d->queue[d->queue_write_off].sample_max = d->snd_to_biphase_max;
+
+			d->queue_write_off++;
+
+		}
+		d->bit_cnt = 0;
+	}
+
+	if (d->decoder_sync_word == B16(10111111,11111100) /* reverse sync-word*/) {
+		if (d->bit_cnt == LTC_FRAME_BIT_COUNT) {
+			/* reverse frame */
+			int bc;
+			int k = 0;
+			int byte_num_max = LTC_FRAME_BIT_COUNT >> 3;
+
+			/* swap bits */
+			for (k=0; k< byte_num_max; k++) {
+				const unsigned char bi = ((unsigned char*)&d->ltc_frame)[k];
+				unsigned char bo = 0;
+				bo |= (bi & B8(10000000) ) ? B8(00000001) : 0;
+				bo |= (bi & B8(01000000) ) ? B8(00000010) : 0;
+				bo |= (bi & B8(00100000) ) ? B8(00000100) : 0;
+				bo |= (bi & B8(00010000) ) ? B8(00001000) : 0;
+				bo |= (bi & B8(00001000) ) ? B8(00010000) : 0;
+				bo |= (bi & B8(00000100) ) ? B8(00100000) : 0;
+				bo |= (bi & B8(00000010) ) ? B8(01000000) : 0;
+				bo |= (bi & B8(00000001) ) ? B8(10000000) : 0;
+				((unsigned char*)&d->ltc_frame)[k] = bo;
+			}
+
+			/* swap bytes */
+			byte_num_max-=2; // skip sync-word
+			for (k=0; k< (byte_num_max)/2; k++) {
+				const unsigned char bi = ((unsigned char*)&d->ltc_frame)[k];
+				((unsigned char*)&d->ltc_frame)[k] = ((unsigned char*)&d->ltc_frame)[byte_num_max-1-k];
+				((unsigned char*)&d->ltc_frame)[byte_num_max-1-k] = bi;
+			}
+
+			if (d->queue_write_off == d->queue_len) {
+				d->queue_write_off = 0;
+			}
+
+			memcpy( &d->queue[d->queue_write_off].ltc,
+				&d->ltc_frame,
+				sizeof(LTCFrame));
+
+			for(bc = 0; bc < LTC_FRAME_BIT_COUNT; ++bc) {
+				const int btc = (d->biphase_tic + bc ) % LTC_FRAME_BIT_COUNT;
+				d->queue[d->queue_write_off].biphase_tics[bc] = d->biphase_tics[btc];
+			}
+
+			d->queue[d->queue_write_off].off_start = d->frame_start_off - 16 * d->snd_to_biphase_period;
+			d->queue[d->queue_write_off].off_end = posinfo + (ltc_off_t) offset - 1LL - 16 * d->snd_to_biphase_period;
+			d->queue[d->queue_write_off].reverse = (LTC_FRAME_BIT_COUNT >> 3) * 8 * d->snd_to_biphase_period;
+			d->queue[d->queue_write_off].volume = calc_volume_db(d);
+			d->queue[d->queue_write_off].sample_min = d->snd_to_biphase_min;
+			d->queue[d->queue_write_off].sample_max = d->snd_to_biphase_max;
+
+			d->queue_write_off++;
+		}
+		d->bit_cnt = 0;
+	}
 }
 
-void decode_ltc(LTCDecoderRef d, ltcsnd_sample_t *sound, size_t size, ltc_off_t posinfo) {
-  for (size_t i = 0; i < size; i++) {
-    ltcsnd_sample_t max_threshold, min_threshold;
+static inline void biphase_decode2(LTCDecoder *d, ltc_off_t offset, ltc_off_t pos) {
 
-    d->snd_to_biphase_min = SAMPLE_CENTER - (((SAMPLE_CENTER - d->snd_to_biphase_min) * 15) / 16);
-    d->snd_to_biphase_max = SAMPLE_CENTER + (((d->snd_to_biphase_max - SAMPLE_CENTER) * 15) / 16);
+	d->biphase_tics[d->biphase_tic] = d->snd_to_biphase_period;
+	d->biphase_tic = (d->biphase_tic + 1) % LTC_FRAME_BIT_COUNT;
+	if (d->snd_to_biphase_cnt <= 2 * d->snd_to_biphase_period) {
+		pos -= (d->snd_to_biphase_period - d->snd_to_biphase_cnt);
+	}
 
-    if (sound[i] < d->snd_to_biphase_min) {
-      d->snd_to_biphase_min = sound[i];
-    }
-    if (sound[i] > d->snd_to_biphase_max) {
-      d->snd_to_biphase_max = sound[i];
-    }
-
-    min_threshold = SAMPLE_CENTER - (((SAMPLE_CENTER - d->snd_to_biphase_min) * 8) / 16);
-    max_threshold = SAMPLE_CENTER + (((d->snd_to_biphase_max - SAMPLE_CENTER) * 8) / 16);
-
-    if ((d->snd_to_biphase_state && (sound[i] > max_threshold)) ||
-        (!d->snd_to_biphase_state && (sound[i] < min_threshold))) {
-      if (d->snd_to_biphase_cnt > d->snd_to_biphase_lmt) {
-        biphase_decode2(d, (ltc_off_t)i, posinfo);
-        biphase_decode2(d, (ltc_off_t)i, posinfo);
-      } else {
-        d->snd_to_biphase_cnt *= 2;
-        biphase_decode2(d, (ltc_off_t)i, posinfo);
-      }
-
-      if (d->snd_to_biphase_cnt > (d->snd_to_biphase_period * 4)) {
-        d->bit_cnt = 0;
-      } else {
-        d->snd_to_biphase_period = (d->snd_to_biphase_period * 3.0 + d->snd_to_biphase_cnt) / 4.0;
-        d->snd_to_biphase_lmt = (d->snd_to_biphase_period * 3) / 4;
-      }
-
-      d->snd_to_biphase_cnt = 0;
-      d->snd_to_biphase_state = !d->snd_to_biphase_state;
-    }
-    d->snd_to_biphase_cnt++;
-  }
+	if (d->snd_to_biphase_state == d->biphase_prev) {
+		d->biphase_state = 1;
+		parse_ltc(d, 0, offset, pos);
+	} else {
+		d->biphase_state = 1 - d->biphase_state;
+		if (d->biphase_state == 1) {
+			parse_ltc(d, 1, offset, pos);
+		}
+	}
+	d->biphase_prev = d->snd_to_biphase_state;
 }
 
-LTCDecoderRef ltc_decoder_create(int apv, int queue_len) {
-  LTCDecoderRef d = (LTCDecoderRef)calloc(1, sizeof(struct LTCDecoder));
-  if (!d) {
-    return NULL;
-  }
-  if (queue_len < 1) {
-    queue_len = 1;
-  }
+void decode_ltc(LTCDecoder *d, ltcsnd_sample_t *sound, size_t size, ltc_off_t posinfo) {
+	size_t i;
 
-  d->queue_len = queue_len;
-  d->queue = (LTCFrameExt *)calloc((size_t)d->queue_len, sizeof(LTCFrameExt));
-  if (!d->queue) {
-    free(d);
-    return NULL;
-  }
+	for (i = 0 ; i < size ; i++) {
+		ltcsnd_sample_t max_threshold, min_threshold;
 
-  d->biphase_state = 1;
-  d->snd_to_biphase_period = apv / 80.0;
-  d->snd_to_biphase_lmt = (d->snd_to_biphase_period * 3) / 4;
-  d->snd_to_biphase_min = SAMPLE_CENTER;
-  d->snd_to_biphase_max = SAMPLE_CENTER;
-  d->frame_start_prev = -1;
-  d->biphase_tic = 0;
+		/* track minimum and maximum values */
+		d->snd_to_biphase_min = SAMPLE_CENTER - (((SAMPLE_CENTER - d->snd_to_biphase_min) * 15) / 16);
+		d->snd_to_biphase_max = SAMPLE_CENTER + (((d->snd_to_biphase_max - SAMPLE_CENTER) * 15) / 16);
 
-  return d;
-}
+		if (sound[i] < d->snd_to_biphase_min)
+			d->snd_to_biphase_min = sound[i];
+		if (sound[i] > d->snd_to_biphase_max)
+			d->snd_to_biphase_max = sound[i];
 
-int ltc_decoder_free(LTCDecoderRef d) {
-  if (!d) {
-    return 1;
-  }
-  if (d->queue) {
-    free(d->queue);
-  }
-  free(d);
-  return 0;
-}
+		/* set the thresholds for hi/lo state tracking */
+		min_threshold = SAMPLE_CENTER - (((SAMPLE_CENTER - d->snd_to_biphase_min) * 8) / 16);
+		max_threshold = SAMPLE_CENTER + (((d->snd_to_biphase_max - SAMPLE_CENTER) * 8) / 16);
 
-void ltc_decoder_write_float(LTCDecoderRef d, float *buf, size_t size, ltc_off_t posinfo) {
-  ltcsnd_sample_t tmp[1024];
-  size_t copyStart = 0;
-  while (copyStart < size) {
-    int c = (int)(size - copyStart);
-    if (c > (int)(sizeof(tmp) / sizeof(tmp[0]))) {
-      c = (int)(sizeof(tmp) / sizeof(tmp[0]));
-    }
-    for (int i = 0; i < c; i++) {
-      float sample = buf[copyStart + (size_t)i];
-      int value = (int)lrintf(128.0f + (sample * 127.0f));
-      if (value < 0) value = 0;
-      if (value > 255) value = 255;
-      tmp[i] = (ltcsnd_sample_t)value;
-    }
-    decode_ltc(d, tmp, (size_t)c, posinfo + (ltc_off_t)copyStart);
-    copyStart += (size_t)c;
-  }
-}
+		if ( /* Check for a biphase state change */
+			   (  d->snd_to_biphase_state && (sound[i] > max_threshold) )
+			|| ( !d->snd_to_biphase_state && (sound[i] < min_threshold) )
+		   ) {
 
-int ltc_decoder_read(LTCDecoderRef d, LTCFrameExt *frame) {
-  if (!frame) {
-    return -1;
-  }
-  if (d->queue_read_off != d->queue_write_off) {
-    if (d->queue_read_off == d->queue_len) {
-      d->queue_read_off = 0;
-    }
-    memcpy(frame, &d->queue[d->queue_read_off], sizeof(LTCFrameExt));
-    d->queue_read_off++;
-    return 1;
-  }
-  return 0;
-}
+			/* If the sample count has risen above the biphase length limit */
+			if (d->snd_to_biphase_cnt > d->snd_to_biphase_lmt) {
+				/* single state change within a biphase priod. decode to a 0 */
+				biphase_decode2(d, i, posinfo);
+				biphase_decode2(d, i, posinfo);
 
-void ltc_decoder_queue_flush(LTCDecoderRef d) {
-  d->queue_read_off = d->queue_write_off;
-}
+			} else {
+				/* "short" state change covering half a period
+				 * together with the next or previous state change decode to a 1
+				 */
+				d->snd_to_biphase_cnt *= 2;
+				biphase_decode2(d, i, posinfo);
 
-int ltc_decoder_queue_length(LTCDecoderRef d) {
-  return (d->queue_write_off - d->queue_read_off + d->queue_len) % d->queue_len;
+			}
+
+			if (d->snd_to_biphase_cnt > (d->snd_to_biphase_period * 4)) {
+				/* "long" silence in between
+				 * -> reset parser, don't use it for phase-tracking
+				 */
+				d->bit_cnt = 0;
+			} else  {
+				/* track speed variations
+				 * As this is only executed at a state change,
+				 * d->snd_to_biphase_cnt is an accurate representation of the current period length.
+				 */
+				d->snd_to_biphase_period = (d->snd_to_biphase_period * 3.0 + d->snd_to_biphase_cnt) / 4.0;
+
+				/* This limit specifies when a state-change is
+				 * considered biphase-clock or 2*biphase-clock.
+				 * The relation with period has been determined
+				 * empirically through trial-and-error */
+				d->snd_to_biphase_lmt = (d->snd_to_biphase_period * 3) / 4;
+			}
+
+			d->snd_to_biphase_cnt = 0;
+			d->snd_to_biphase_state = !d->snd_to_biphase_state;
+		}
+		d->snd_to_biphase_cnt++;
+	}
 }

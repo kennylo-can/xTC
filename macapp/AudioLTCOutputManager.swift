@@ -26,12 +26,14 @@ enum LTCFrameEncoder {
     tc: TimecodeValue,
     rate: FrameRateOption,
     sampleRate: Double,
+    frameSampleCount: Int? = nil,
     amplitude: Float = 0.5,
     level: inout Float,
     into out: inout [Float]
   ) {
     let bits = buildBits(tc: tc, rate: rate)
     encodeBMC(bits: bits, sampleRate: sampleRate, fps: rate.fps,
+              frameSampleCount: frameSampleCount,
               amplitude: amplitude, level: &level, into: &out)
   }
 
@@ -77,12 +79,17 @@ enum LTCFrameEncoder {
     let sync: [UInt8] = [0,0,1,1, 1,1,1,1, 1,1,1,1, 1,1,0,1]
     for i in 0..<16 { b[64 + i] = sync[i] }
 
-    // Bit 27 — biphase-mark phase correction.
-    // Set so the count of '1' bits in bits 0–63 (data + user) is even, which
-    // keeps the BMC waveform polarity at the start of the sync word consistent.
-    var ones = 0
-    for i in 0..<64 { ones += Int(b[i]) }
-    if ones % 2 == 1 { b[27] = 1 }
+    // Biphase-mark phase correction parity bit.
+    // For 25fps this lives at bit 59; for 24/29.97/30 it is bit 27.
+    // SMPTE rule: if zeros in bit positions 0..63 (excluding the parity bit itself)
+    // are odd, set parity bit to 1. Since that set has 63 bits total, this is
+    // equivalent to setting parity when ones(excluding parity) is even.
+    let parityBitIndex = rate.id == "25" ? 59 : 27
+    var onesExcludingParity = 0
+    for i in 0..<64 where i != parityBitIndex {
+      onesExcludingParity += Int(b[i])
+    }
+    b[parityBitIndex] = (onesExcludingParity % 2 == 0) ? 1 : 0
 
     return b
   }
@@ -99,13 +106,22 @@ enum LTCFrameEncoder {
     bits: [UInt8],
     sampleRate: Double,
     fps: Double,
+    frameSampleCount: Int?,
     amplitude: Float,
     level: inout Float,
     into out: inout [Float]
   ) {
-    let bitRate      = fps * 80.0
-    let spb          = sampleRate / bitRate
-    let totalSamples = Int((sampleRate / fps).rounded())
+    let totalSamples = max(1, frameSampleCount ?? Int((sampleRate / fps).rounded()))
+    let spb: Double
+    if let frameSampleCount {
+      // Keep all 80 bits fully inside this frame's sample budget.
+      // This avoids truncating the tail of a frame when non-integer fps
+      // requires alternating frame sample counts.
+      spb = Double(frameSampleCount) / 80.0
+    } else {
+      let bitRate = fps * 80.0
+      spb = sampleRate / bitRate
+    }
 
     out.removeAll(keepingCapacity: true)
     out.reserveCapacity(totalSamples)
@@ -149,28 +165,40 @@ private final class LTCOutputClock {
   private var currentTC: TimecodeValue?
   private var currentRate: FrameRateOption?
   private var frameBuffer = [Float]()          // pre-allocated, reused every frame
+  private var encoderScratch = [Float](repeating: 0, count: 4096)
+  private var ltcEncoder: OpaquePointer?
+  private var encoderRateID: String?
+  private var encoderSampleRate: Double = 0
   private var position: Int = 0
-  private var bmcLevel: Float = 0.5            // BMC waveform polarity, carried across frames
-  private let amplitude: Float = 0.5
-
-  // Sample-accurate frame tracking
-  private var samplesRenderedTotal: Int64 = 0  // cumulative samples output
-  private var nextFrameSampleBoundary: Int64 = 0  // sample count at which to advance to next frame
+  private let encoderLevelDbfs: Double = -5.0  // conservative output level for stable decode without clipping
+  private let encoderRiseTimeUs: Double = 40.0
 
   // Pending timecode from the main thread
   private var _pendingLock = os_unfair_lock()
   private var _pendingTC: TimecodeValue?
   private var _pendingRate: FrameRateOption?
+  private var _pendingCapturedAt: Date?
   private var _hasPending: Bool = false
+  var onMeasuredLatency: ((Double) -> Void)?
+  private var pendingResyncCandidate: TimecodeValue?
+  private var pendingResyncCount: Int = 0
 
   var sampleRate: Double = 48_000             // set once before first render
 
+  deinit {
+    if let ltcEncoder {
+      xtc_ltc_encoder_free(ltcEncoder)
+      self.ltcEncoder = nil
+    }
+  }
+
   // MARK: Called from main thread
 
-  func post(tc: TimecodeValue, rate: FrameRateOption) {
+  func post(tc: TimecodeValue, rate: FrameRateOption, capturedAt: Date) {
     os_unfair_lock_lock(&_pendingLock)
     _pendingTC   = tc
     _pendingRate = rate
+    _pendingCapturedAt = capturedAt
     _hasPending  = true
     os_unfair_lock_unlock(&_pendingLock)
   }
@@ -179,15 +207,21 @@ private final class LTCOutputClock {
     os_unfair_lock_lock(&_pendingLock)
     _pendingTC  = nil
     _pendingRate = nil
+    _pendingCapturedAt = nil
     _hasPending  = false
     os_unfair_lock_unlock(&_pendingLock)
     currentTC   = nil
     currentRate = nil
     position    = 0
-    bmcLevel    = amplitude
+    if let ltcEncoder {
+      xtc_ltc_encoder_free(ltcEncoder)
+      self.ltcEncoder = nil
+    }
+    encoderRateID = nil
+    encoderSampleRate = 0
+    pendingResyncCandidate = nil
+    pendingResyncCount = 0
     frameBuffer.removeAll(keepingCapacity: true)
-    samplesRenderedTotal = 0
-    nextFrameSampleBoundary = 0
   }
 
   // MARK: Called from audio render thread
@@ -196,8 +230,7 @@ private final class LTCOutputClock {
   func render(into dest: UnsafeMutablePointer<Float>, count: Int) {
     var written = 0
     while written < count {
-      // Check if we've reached the next frame boundary based on sample count.
-      if samplesRenderedTotal >= nextFrameSampleBoundary {
+      if position >= frameBuffer.count {
         advanceToNextFrame()
         if frameBuffer.isEmpty { // still no TC — output silence
           dest.advanced(by: written).initialize(repeating: 0, count: count - written)
@@ -206,18 +239,15 @@ private final class LTCOutputClock {
         position = 0
       }
 
-      // How many samples until the next frame boundary?
-      let samplesUntilBoundary = Int(nextFrameSampleBoundary - samplesRenderedTotal)
       let available = frameBuffer.count - position
       let needed = count - written
-      let chunk = min(samplesUntilBoundary, min(available, needed))
+      let chunk = min(available, needed)
 
       frameBuffer.withUnsafeBufferPointer { buf in
         (dest + written).initialize(from: buf.baseAddress! + position, count: chunk)
       }
       position += chunk
       written += chunk
-      samplesRenderedTotal += Int64(chunk)
     }
   }
 
@@ -227,37 +257,156 @@ private final class LTCOutputClock {
     // Apply any pending TC update from the main thread.
     var newTC: TimecodeValue?
     var newRate: FrameRateOption?
+    var pendingCapturedAt: Date?
     os_unfair_lock_lock(&_pendingLock)
     if _hasPending {
       newTC    = _pendingTC
       newRate  = _pendingRate
+      pendingCapturedAt = _pendingCapturedAt
       _hasPending = false
     }
     os_unfair_lock_unlock(&_pendingLock)
 
     if let tc = newTC, let rate = newRate {
-      currentTC   = tc
+      if let current = currentTC, let currentRate {
+        if currentRate.id == rate.id {
+          let expected = nextTimecode(after: current, rate: rate)
+          let deltaFrames = frameDelta(candidate: tc, reference: expected, rate: rate)
+          if abs(deltaFrames) <= 2 {
+            // Keep a stable clock when upstream jitter is within a tiny window.
+            currentTC = expected
+            pendingResyncCandidate = nil
+            pendingResyncCount = 0
+          } else {
+            // Guard against one-off decode glitches. Require two consecutive
+            // outlier anchors before resyncing, unless jump is very large.
+            if abs(deltaFrames) >= Int(rate.fps * 2.0) {
+              currentTC = tc
+              pendingResyncCandidate = nil
+              pendingResyncCount = 0
+            } else if let candidate = pendingResyncCandidate,
+                      frameDelta(candidate: tc, reference: candidate, rate: rate) == 1
+                        || frameDelta(candidate: tc, reference: candidate, rate: rate) == 0 {
+              pendingResyncCount += 1
+              if pendingResyncCount >= 2 {
+                currentTC = tc
+                pendingResyncCandidate = nil
+                pendingResyncCount = 0
+              } else {
+                currentTC = expected
+              }
+            } else {
+              pendingResyncCandidate = tc
+              pendingResyncCount = 1
+              currentTC = expected
+            }
+          }
+        } else {
+          // Rate changed: resync immediately.
+          currentTC = tc
+          pendingResyncCandidate = nil
+          pendingResyncCount = 0
+        }
+      } else {
+        // First lock.
+        currentTC = tc
+        pendingResyncCandidate = nil
+        pendingResyncCount = 0
+      }
       currentRate = rate
+      if let capturedAt = pendingCapturedAt {
+        let milliseconds = max(0, Date().timeIntervalSince(capturedAt) * 1000.0)
+        onMeasuredLatency?(milliseconds)
+      }
     } else if let tc = currentTC, let rate = currentRate {
-      // Advance by one frame.
+      // No new anchor this frame: free-run on the local stable clock.
       currentTC = nextTimecode(after: tc, rate: rate)
     } else {
       return  // no TC known yet
     }
 
     guard let tc = currentTC, let rate = currentRate else { return }
-    LTCFrameEncoder.encode(tc: tc, rate: rate, sampleRate: sampleRate,
-                            amplitude: amplitude, level: &bmcLevel,
-                            into: &frameBuffer)
+    ensureScratchCapacity()
+    guard ensureEncoder(rate: rate) else {
+      frameBuffer.removeAll(keepingCapacity: true)
+      return
+    }
+    guard let ltcEncoder else {
+      frameBuffer.removeAll(keepingCapacity: true)
+      return
+    }
 
-    // Schedule the next frame boundary: add the true frame duration (in samples) to the current boundary.
-    let frameDurationSamples = sampleRate / rate.fps
-    nextFrameSampleBoundary = Int64(Double(nextFrameSampleBoundary) + frameDurationSamples)
+    let len = encoderScratch.withUnsafeMutableBufferPointer { scratch in
+      guard let base = scratch.baseAddress else { return Int32(0) }
+      return xtc_ltc_encoder_encode_frame(
+        ltcEncoder,
+        Int32(tc.hours),
+        Int32(tc.minutes),
+        Int32(tc.seconds),
+        Int32(tc.frames),
+        tc.delimiter == ";" ? 1 : 0,
+        base,
+        Int32(scratch.count)
+      )
+    }
+
+    if len <= 0 {
+      frameBuffer.removeAll(keepingCapacity: true)
+      return
+    }
+    frameBuffer.removeAll(keepingCapacity: true)
+    frameBuffer.append(contentsOf: encoderScratch.prefix(Int(len)))
   }
 
   private func nextTimecode(after tc: TimecodeValue, rate: FrameRateOption) -> TimecodeValue {
     let totalFrames = TimecodeMath.timecodeToFrames(tc, rate: rate) + 1
     return TimecodeMath.secondsToTimecode(Double(totalFrames) / rate.fps, rate: rate)
+  }
+
+  private func frameDelta(candidate: TimecodeValue, reference: TimecodeValue, rate: FrameRateOption) -> Int {
+    var deltaSeconds = TimecodeMath.timecodeToSeconds(candidate, rate: rate) - TimecodeMath.timecodeToSeconds(reference, rate: rate)
+    if deltaSeconds > 43_200 { deltaSeconds -= 86_400 }
+    if deltaSeconds < -43_200 { deltaSeconds += 86_400 }
+    return Int((deltaSeconds * rate.fps).rounded())
+  }
+
+  private func ensureScratchCapacity() {
+    let required = max(4096, Int(ceil(sampleRate / 23.0)) + 512)
+    if encoderScratch.count < required {
+      encoderScratch = [Float](repeating: 0, count: required)
+    }
+  }
+
+  private func ensureEncoder(rate: FrameRateOption) -> Bool {
+    let standard = tvStandard(for: rate)
+    if let ltcEncoder {
+      if encoderRateID != rate.id || abs(encoderSampleRate - sampleRate) > 0.5 {
+        let rc = xtc_ltc_encoder_reinit(ltcEncoder, sampleRate, rate.fps, standard, encoderLevelDbfs, encoderRiseTimeUs)
+        guard rc == 0 else { return false }
+        encoderRateID = rate.id
+        encoderSampleRate = sampleRate
+      }
+      return true
+    }
+
+    guard let created = xtc_ltc_encoder_create(sampleRate, rate.fps, standard, encoderLevelDbfs, encoderRiseTimeUs) else {
+      return false
+    }
+    ltcEncoder = created
+    encoderRateID = rate.id
+    encoderSampleRate = sampleRate
+    return true
+  }
+
+  private func tvStandard(for rate: FrameRateOption) -> Int32 {
+    switch rate.id {
+    case "25":
+      return Int32(LTC_TV_625_50.rawValue)
+    case "24", "2398":
+      return Int32(LTC_TV_FILM_24.rawValue)
+    default:
+      return Int32(LTC_TV_525_60.rawValue)
+    }
   }
 }
 
@@ -267,6 +416,7 @@ private final class LTCOutputClock {
 final class AudioLTCOutputManager: ObservableObject {
   @Published var statusText: String = AppLanguageStore.text("Ready", "就绪")
   @Published var devices: [AudioOutputDeviceItem] = []
+  @Published var measuredLatencyMs: Double?
   @Published var selectedDeviceID: AudioDeviceID? {
     didSet { if isRunning { restartEngine() } }
   }
@@ -276,7 +426,19 @@ final class AudioLTCOutputManager: ObservableObject {
   private var sourceNode: AVAudioSourceNode?
   private var isRunning = false
 
-  init() { refreshDevices() }
+  init() {
+    clock.onMeasuredLatency = { [weak self] ms in
+      DispatchQueue.main.async {
+        guard let self else { return }
+        if let previous = self.measuredLatencyMs {
+          self.measuredLatencyMs = (previous * 0.7) + (ms * 0.3)
+        } else {
+          self.measuredLatencyMs = ms
+        }
+      }
+    }
+    refreshDevices()
+  }
 
   // MARK: Public API
 
@@ -289,12 +451,13 @@ final class AudioLTCOutputManager: ObservableObject {
     isRunning = false
     clock.reset()
     stopEngine()
+    measuredLatencyMs = nil
     statusText = AppLanguageStore.text("LTC audio output stopped", "LTC 音频输出已停止")
   }
 
-  func updateTimecode(_ tc: TimecodeValue, rate: FrameRateOption) {
+  func updateTimecode(_ tc: TimecodeValue, rate: FrameRateOption, inputCapturedAt: Date) {
     guard isRunning else { return }
-    clock.post(tc: tc, rate: rate)
+    clock.post(tc: tc, rate: rate, capturedAt: inputCapturedAt)
   }
 
   func refreshDevices() {

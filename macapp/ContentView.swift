@@ -1047,11 +1047,11 @@ struct ContentView: View {
 
   private var latencyValueText: String {
     let milliseconds: Double?
-    switch inputMode {
-    case .ltc:
-      milliseconds = audio.latencyEstimateMs
+    switch outputMode {
     case .mtc:
-      milliseconds = midi.latencyEstimateMs
+      milliseconds = midiOut.measuredLatencyMs
+    case .ltc:
+      milliseconds = ltcOut.measuredLatencyMs
     }
 
     guard let milliseconds else { return "--" }
@@ -1091,11 +1091,18 @@ struct ContentView: View {
   /// The clock runs at outputRate.fps × 4 Hz and sends QF nibbles on its own timer.
   private func feedOutputClock() {
     guard isRunning, let conversion else { return }
+    let inputCapturedAt: Date
+    switch inputMode {
+    case .ltc:
+      inputCapturedAt = audio.lastReceivedAt ?? Date()
+    case .mtc:
+      inputCapturedAt = midi.lastReceivedAt ?? Date()
+    }
     switch outputMode {
     case .mtc:
-      midiOut.updatePosition(tc: conversion.outputTimecode, rate: outputRate)
+      midiOut.updatePosition(tc: conversion.outputTimecode, rate: outputRate, inputCapturedAt: inputCapturedAt)
     case .ltc:
-      ltcOut.updateTimecode(conversion.outputTimecode, rate: outputRate)
+      ltcOut.updateTimecode(conversion.outputTimecode, rate: outputRate, inputCapturedAt: inputCapturedAt)
     }
   }
 }

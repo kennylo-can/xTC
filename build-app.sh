@@ -24,6 +24,10 @@ else
   TARGET="x86_64-apple-macos13.0"
 fi
 LTC_DECODER_OBJ="$BUILD_DIR/decoder.o"
+LTC_ENCODER_OBJ="$BUILD_DIR/encoder.o"
+LTC_CORE_OBJ="$BUILD_DIR/ltc.o"
+LTC_TIMECODE_OBJ="$BUILD_DIR/timecode.o"
+LTC_BRIDGE_OBJ="$BUILD_DIR/LTCBridge.o"
 
 mkdir -p "$MODULE_CACHE" "$MACOS_DIR" "$RESOURCES_DIR"
 
@@ -33,14 +37,30 @@ if [ ! -f "$ICON_REFERENCE" ]; then
 fi
 
 echo "→ Generating app icon..."
-DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer \
-SWIFT_MODULE_CACHE_PATH="$MODULE_CACHE" \
-CLANG_MODULE_CACHE_PATH="$MODULE_CACHE" \
-swift "$ROOT_DIR/tools/generate_app_icon.swift" "$ICON_REFERENCE" "$ICNS_PATH"
+if ! DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer \
+  SWIFT_MODULE_CACHE_PATH="$MODULE_CACHE" \
+  CLANG_MODULE_CACHE_PATH="$MODULE_CACHE" \
+  swift "$ROOT_DIR/tools/generate_app_icon.swift" "$ICON_REFERENCE" "$ICNS_PATH"
+then
+  if [ -f "$ICNS_PATH" ]; then
+    echo "⚠️  Icon generation failed; keeping existing AppIcon.icns"
+  else
+    echo "❌ Icon generation failed and no fallback icon exists: $ICNS_PATH" >&2
+    exit 1
+  fi
+fi
 
-echo "→ Compiling LTC C decoder ($TARGET)..."
+echo "→ Compiling libltc C sources ($TARGET)..."
 clang -std=c99 -O2 -target "$TARGET" -isysroot "$SDK_PATH" \
   -I"$LTC_C_DIR" -c "$LTC_C_DIR/decoder.c" -o "$LTC_DECODER_OBJ"
+clang -std=c99 -O2 -target "$TARGET" -isysroot "$SDK_PATH" \
+  -I"$LTC_C_DIR" -c "$LTC_C_DIR/encoder.c" -o "$LTC_ENCODER_OBJ"
+clang -std=c99 -O2 -target "$TARGET" -isysroot "$SDK_PATH" \
+  -I"$LTC_C_DIR" -c "$LTC_C_DIR/ltc.c" -o "$LTC_CORE_OBJ"
+clang -std=c99 -O2 -target "$TARGET" -isysroot "$SDK_PATH" \
+  -I"$LTC_C_DIR" -c "$LTC_C_DIR/timecode.c" -o "$LTC_TIMECODE_OBJ"
+clang -std=c99 -O2 -target "$TARGET" -isysroot "$SDK_PATH" \
+  -I"$LTC_C_DIR" -c "$ROOT_DIR/macapp/LTCBridge.c" -o "$LTC_BRIDGE_OBJ"
 
 cat > "$CONTENTS_DIR/Info.plist" <<'EOF'
 <?xml version="1.0" encoding="UTF-8"?>
@@ -92,6 +112,10 @@ swiftc -parse-as-library \
   "$ROOT_DIR/macapp/MIDIManager.swift" \
   "$ROOT_DIR/macapp/MIDIOutputManager.swift" \
   "$LTC_DECODER_OBJ" \
+  "$LTC_ENCODER_OBJ" \
+  "$LTC_CORE_OBJ" \
+  "$LTC_TIMECODE_OBJ" \
+  "$LTC_BRIDGE_OBJ" \
   -o "$BIN_PATH" \
   -framework SwiftUI \
   -framework AppKit \

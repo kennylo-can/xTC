@@ -27,6 +27,9 @@ private final class MTCClock {
   private var destination: MIDIEndpointRef?
   var outputPort: MIDIPortRef = 0   // set once from setupClient; read on queue
   private var cachedQF: [[UInt8]] = []
+  private var latestInputCapturedAt: Date?
+  private var shouldEmitLatencySample: Bool = false
+  var onMeasuredLatency: ((Double) -> Void)?
 
   // Stop freewheeling after this many seconds with no updatePosition call.
   private let staleTimeout: TimeInterval = 0.6
@@ -64,7 +67,12 @@ private final class MTCClock {
     }
   }
 
-  func updatePosition(tc: TimecodeValue, rate: FrameRateOption, capturedAt now: Date) {
+  func updatePosition(
+    tc: TimecodeValue,
+    rate: FrameRateOption,
+    capturedAt now: Date,
+    inputCapturedAt: Date
+  ) {
     let newSeconds = TimecodeMath.timecodeToSeconds(tc, rate: rate)
     // Capture rate for use inside the closure (avoids @MainActor crossing)
     let fps = rate.fps
@@ -83,12 +91,18 @@ private final class MTCClock {
       self.baseDate = now
       self.lastSentSeconds = newSeconds
       self.lastPositionUpdate = now
+      self.latestInputCapturedAt = inputCapturedAt
+      self.shouldEmitLatencySample = true
 
       if isJump {
         self.piece = 0
         self.currentSeconds = newSeconds
         self.cachedQF = []
         self.sendFullFrame(tc: tc, rate: rate)
+      } else if self.isRunning {
+        // Push one QF immediately on fresh input so we do not always wait
+        // for the next timer tick before the receiver sees updated position.
+        self.emitImmediateQuarterFrame(rate: rate)
       }
 
       if !self.isRunning {
@@ -149,8 +163,20 @@ private final class MTCClock {
     sendRaw(TimecodeMath.mtcFullFrameBytes(tc, rate: rate))
   }
 
+  private func emitImmediateQuarterFrame(rate: FrameRateOption) {
+    if piece == 0 {
+      currentSeconds = baseSeconds + Date().timeIntervalSince(baseDate)
+      let tc = TimecodeMath.secondsToTimecode(currentSeconds, rate: rate)
+      cachedQF = TimecodeMath.mtcQuarterFrameBytes(tc, rate: rate)
+    }
+    guard piece < cachedQF.count else { return }
+    sendRaw(cachedQF[piece])
+    piece = (piece + 1) % 8
+  }
+
   private func sendRaw(_ bytes: [UInt8]) {
     guard let dest = destination, outputPort != 0 else { return }
+    let sentAt = Date()
     var packetList = MIDIPacketList()
     let packet = MIDIPacketListInit(&packetList)
     bytes.withUnsafeBytes { buf in
@@ -162,6 +188,12 @@ private final class MTCClock {
       )
     }
     MIDISend(outputPort, dest, &packetList)
+
+    if shouldEmitLatencySample, let capturedAt = latestInputCapturedAt {
+      let milliseconds = max(0, sentAt.timeIntervalSince(capturedAt) * 1000.0)
+      shouldEmitLatencySample = false
+      onMeasuredLatency?(milliseconds)
+    }
   }
 }
 
@@ -174,6 +206,7 @@ final class MIDIOutputManager: ObservableObject {
     didSet { pushDestinationToClock() }
   }
   @Published var statusText: String = AppLanguageStore.text("No output selected", "未选择输出")
+  @Published var measuredLatencyMs: Double?
 
   private var client = MIDIClientRef()
   private var outputPort = MIDIPortRef()
@@ -182,6 +215,16 @@ final class MIDIOutputManager: ObservableObject {
   private lazy var clock = MTCClock(queue: clockQueue)
 
   init() {
+    clock.onMeasuredLatency = { [weak self] ms in
+      DispatchQueue.main.async {
+        guard let self else { return }
+        if let previous = self.measuredLatencyMs {
+          self.measuredLatencyMs = (previous * 0.7) + (ms * 0.3)
+        } else {
+          self.measuredLatencyMs = ms
+        }
+      }
+    }
     setupClient()
     refreshDestinations()
     if let first = destinations.first {
@@ -221,14 +264,15 @@ final class MIDIOutputManager: ObservableObject {
 
   func stopClock() {
     clock.stop()
+    measuredLatencyMs = nil
   }
 
   func updateRate(_ rate: FrameRateOption) {
     clock.updateRate(rate)
   }
 
-  func updatePosition(tc: TimecodeValue, rate: FrameRateOption) {
-    clock.updatePosition(tc: tc, rate: rate, capturedAt: Date())
+  func updatePosition(tc: TimecodeValue, rate: FrameRateOption, inputCapturedAt: Date) {
+    clock.updatePosition(tc: tc, rate: rate, capturedAt: Date(), inputCapturedAt: inputCapturedAt)
   }
 
   // MARK: - Internals
