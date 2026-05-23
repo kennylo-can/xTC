@@ -1,4 +1,5 @@
 # xTC
+<img width="859" height="450" alt="image" src="https://github.com/user-attachments/assets/2ba748d4-0c47-4a37-861e-17323c2700b0" />
 
 ## English
 
