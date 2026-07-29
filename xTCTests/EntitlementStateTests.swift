@@ -25,4 +25,15 @@ final class EntitlementStateTests: XCTestCase {
     )
     XCTAssertEqual(state, .locked)
   }
+
+  func testPurchaseCopyExistsInBothLanguages() {
+    XCTAssertEqual(
+      AppLanguageStore.text("Unlock xTC Pro", "解锁 xTC Pro", language: .english),
+      "Unlock xTC Pro"
+    )
+    XCTAssertEqual(
+      AppLanguageStore.text("Unlock xTC Pro", "解锁 xTC Pro", language: .simplifiedChinese),
+      "解锁 xTC Pro"
+    )
+  }
 }

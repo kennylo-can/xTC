@@ -20,6 +20,14 @@ enum AppLanguageStore {
   }
 
   static func text(_ english: String, _ chinese: String) -> String {
-    current == .simplifiedChinese ? chinese : english
+    text(english, chinese, language: current)
+  }
+
+  static func text(
+    _ english: String,
+    _ chinese: String,
+    language: AppLanguage
+  ) -> String {
+    language == .simplifiedChinese ? chinese : english
   }
 }

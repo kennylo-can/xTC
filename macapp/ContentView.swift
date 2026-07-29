@@ -62,6 +62,7 @@ private struct LayoutMetrics {
 }
 
 struct ContentView: View {
+  @EnvironmentObject private var entitlementStore: EntitlementStore
   @StateObject private var midi = MIDIManager()
   @StateObject private var midiOut = MIDIOutputManager()
   @StateObject private var ltcOut = AudioLTCOutputManager()
@@ -76,6 +77,7 @@ struct ContentView: View {
   @State private var inputMode: InputMode = .ltc
   @State private var outputMode: OutputMode = .mtc
   @State private var isRunning: Bool = true
+  @State private var isPurchasePresented = false
 
   private var language: AppLanguage {
     AppLanguage(rawValue: languageRaw) ?? .english
@@ -159,6 +161,10 @@ struct ContentView: View {
     .preferredColorScheme(.dark)
     .frame(width: canvasWidth, height: canvasHeight)
     .background(WindowSizer(size: CGSize(width: canvasWidth, height: canvasHeight)))
+    .sheet(isPresented: $isPurchasePresented) {
+      PurchaseView()
+        .environmentObject(entitlementStore)
+    }
     .onAppear {
       // Restore persisted device selections (validate against current device list)
       if savedAudioDeviceID != 0 {
@@ -318,6 +324,14 @@ struct ContentView: View {
         .foregroundStyle(.white.opacity(0.88))
 
       Spacer(minLength: 12)
+
+      if !entitlementStore.isProUnlocked {
+        Button(t("Unlock Pro", "解锁 Pro")) {
+          isPurchasePresented = true
+        }
+        .buttonStyle(.bordered)
+        .controlSize(.small)
+      }
 
       Text(language == .simplifiedChinese ? "简体中文" : "English")
         .font(.system(size: metrics.smallFont, weight: .semibold, design: .rounded))
