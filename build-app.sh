@@ -1,4 +1,5 @@
 #!/bin/bash
+# Direct-download build. The Mac App Store archive is built from xTC.xcodeproj.
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -13,6 +14,7 @@ SDK_PATH="$(DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcrun --sdk
 MODULE_CACHE="/private/tmp/xtc-modulecache"
 ICON_REFERENCE="$ROOT_DIR/assets/AppIconReference.png"
 ICNS_PATH="$RESOURCES_DIR/AppIcon.icns"
+PNG_FALLBACK_PATH="$RESOURCES_DIR/AppIcon.png"
 LTC_C_DIR="$ROOT_DIR/vendor/libltc"
 LTC_BRIDGE_HEADER="$ROOT_DIR/macapp/LTCBridge.h"
 
@@ -45,8 +47,8 @@ then
   if [ -f "$ICNS_PATH" ]; then
     echo "⚠️  Icon generation failed; keeping existing AppIcon.icns"
   else
-    echo "❌ Icon generation failed and no fallback icon exists: $ICNS_PATH" >&2
-    exit 1
+    echo "⚠️  Icon generation failed; bundling AppIconReference.png as a fallback"
+    cp "$ICON_REFERENCE" "$PNG_FALLBACK_PATH"
   fi
 fi
 
