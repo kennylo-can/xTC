@@ -4,10 +4,15 @@ import AppKit
 @main
 struct xTCApp: App {
   @NSApplicationDelegateAdaptor(AppLifecycle.self) var appLifecycle
+  @StateObject private var entitlementStore = EntitlementStore.shared
 
   var body: some Scene {
     WindowGroup {
       ContentView()
+        .environmentObject(entitlementStore)
+        .task {
+          await entitlementStore.start()
+        }
     }
     .defaultSize(width: 920, height: 540)
     .windowResizability(.contentSize)

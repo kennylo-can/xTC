@@ -35,6 +35,8 @@
 		100000000000000000000026 /* EntitlementProviding.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000029 /* EntitlementProviding.swift */; };
 		100000000000000000000027 /* OutputAccessControllerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000030 /* OutputAccessControllerTests.swift */; };
 		100000000000000000000028 /* OutputAccessController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000031 /* OutputAccessController.swift */; };
+		100000000000000000000029 /* EntitlementStoreStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000033 /* EntitlementStoreStateTests.swift */; };
+		100000000000000000000030 /* EntitlementStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000034 /* EntitlementStore.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -69,6 +71,9 @@
 		200000000000000000000029 /* EntitlementProviding.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EntitlementProviding.swift; sourceTree = "<group>"; };
 		200000000000000000000030 /* OutputAccessControllerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OutputAccessControllerTests.swift; sourceTree = "<group>"; };
 		200000000000000000000031 /* OutputAccessController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OutputAccessController.swift; sourceTree = "<group>"; };
+		200000000000000000000032 /* xTC.storekit */ = {isa = PBXFileReference; lastKnownFileType = text; path = xTC.storekit; sourceTree = "<group>"; };
+		200000000000000000000033 /* EntitlementStoreStateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EntitlementStoreStateTests.swift; sourceTree = "<group>"; };
+		200000000000000000000034 /* EntitlementStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EntitlementStore.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -96,6 +101,7 @@
 		); sourceTree = "<group>"; };
 		300000000000000000000002 /* macapp */ = {isa = PBXGroup; children = (
 			200000000000000000000029 /* EntitlementProviding.swift */,
+			200000000000000000000034 /* EntitlementStore.swift */,
 			200000000000000000000031 /* OutputAccessController.swift */,
 			200000000000000000000001 /* xTCApp.swift */,
 			200000000000000000000002 /* Localization.swift */,
@@ -118,6 +124,7 @@
 		); name = libltc; path = vendor/libltc; sourceTree = "<group>"; };
 		300000000000000000000004 /* xTC */ = {isa = PBXGroup; children = (
 			300000000000000000000007 /* Resources */,
+			300000000000000000000009 /* StoreKit */,
 		); name = xTC; path = xTC; sourceTree = "<group>"; };
 		300000000000000000000005 /* Frameworks */ = {isa = PBXGroup; children = (
 			200000000000000000000019 /* SwiftUI.framework */,
@@ -139,7 +146,11 @@
 		300000000000000000000008 /* xTCTests */ = {isa = PBXGroup; children = (
 			200000000000000000000028 /* EntitlementStateTests.swift */,
 			200000000000000000000030 /* OutputAccessControllerTests.swift */,
+			200000000000000000000033 /* EntitlementStoreStateTests.swift */,
 		); name = xTCTests; path = xTCTests; sourceTree = "<group>"; };
+		300000000000000000000009 /* StoreKit */ = {isa = PBXGroup; children = (
+			200000000000000000000032 /* xTC.storekit */,
+		); name = StoreKit; path = StoreKit; sourceTree = "<group>"; };
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
@@ -176,6 +187,7 @@
 /* Begin PBXSourcesBuildPhase section */
 		600000000000000000000001 /* Sources */ = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (
 			100000000000000000000026 /* EntitlementProviding.swift in Sources */,
+			100000000000000000000030 /* EntitlementStore.swift in Sources */,
 			100000000000000000000028 /* OutputAccessController.swift in Sources */,
 			100000000000000000000001 /* xTCApp.swift in Sources */,
 			100000000000000000000002 /* Localization.swift in Sources */,
@@ -196,6 +208,7 @@
 		600000000000000000000004 /* Sources */ = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (
 			100000000000000000000025 /* EntitlementStateTests.swift in Sources */,
 			100000000000000000000027 /* OutputAccessControllerTests.swift in Sources */,
+			100000000000000000000029 /* EntitlementStoreStateTests.swift in Sources */,
 		); runOnlyForDeploymentPostprocessing = 0; };
 /* End PBXSourcesBuildPhase section */
 
