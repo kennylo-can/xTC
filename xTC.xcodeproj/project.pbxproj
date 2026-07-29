@@ -38,6 +38,7 @@
 		100000000000000000000029 /* EntitlementStoreStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000033 /* EntitlementStoreStateTests.swift */; };
 		100000000000000000000030 /* EntitlementStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000034 /* EntitlementStore.swift */; };
 		100000000000000000000031 /* PurchaseView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000035 /* PurchaseView.swift */; };
+		100000000000000000000032 /* TimecodePreviewTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000036 /* TimecodePreviewTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -76,6 +77,7 @@
 		200000000000000000000033 /* EntitlementStoreStateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EntitlementStoreStateTests.swift; sourceTree = "<group>"; };
 		200000000000000000000034 /* EntitlementStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EntitlementStore.swift; sourceTree = "<group>"; };
 		200000000000000000000035 /* PurchaseView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PurchaseView.swift; sourceTree = "<group>"; };
+		200000000000000000000036 /* TimecodePreviewTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimecodePreviewTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -150,6 +152,7 @@
 			200000000000000000000028 /* EntitlementStateTests.swift */,
 			200000000000000000000030 /* OutputAccessControllerTests.swift */,
 			200000000000000000000033 /* EntitlementStoreStateTests.swift */,
+			200000000000000000000036 /* TimecodePreviewTests.swift */,
 		); name = xTCTests; path = xTCTests; sourceTree = "<group>"; };
 		300000000000000000000009 /* StoreKit */ = {isa = PBXGroup; children = (
 			200000000000000000000032 /* xTC.storekit */,
@@ -213,6 +216,7 @@
 			100000000000000000000025 /* EntitlementStateTests.swift in Sources */,
 			100000000000000000000027 /* OutputAccessControllerTests.swift in Sources */,
 			100000000000000000000029 /* EntitlementStoreStateTests.swift in Sources */,
+			100000000000000000000032 /* TimecodePreviewTests.swift in Sources */,
 		); runOnlyForDeploymentPostprocessing = 0; };
 /* End PBXSourcesBuildPhase section */
 

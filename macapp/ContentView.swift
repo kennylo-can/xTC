@@ -16,6 +16,70 @@ enum OutputMode: String, CaseIterable, Identifiable {
   var id: String { rawValue }
 }
 
+@MainActor
+final class LiveOutputPipeline: ObservableObject {
+  private let outputAccess: OutputAccessController
+  private let startMIDI: (FrameRateOption) -> Void
+  private let submitMIDI: (TimecodeValue, FrameRateOption, Date) -> Void
+  private let startLTC: (FrameRateOption) -> Void
+  private let submitLTC: (TimecodeValue, FrameRateOption, Date) -> Void
+
+  init(
+    startMIDI: @escaping (FrameRateOption) -> Void,
+    stopMIDI: @escaping () -> Void,
+    submitMIDI: @escaping (TimecodeValue, FrameRateOption, Date) -> Void,
+    startLTC: @escaping (FrameRateOption) -> Void,
+    stopLTC: @escaping () -> Void,
+    submitLTC: @escaping (TimecodeValue, FrameRateOption, Date) -> Void
+  ) {
+    self.startMIDI = startMIDI
+    self.submitMIDI = submitMIDI
+    self.startLTC = startLTC
+    self.submitLTC = submitLTC
+    outputAccess = OutputAccessController(
+      stopMIDI: stopMIDI,
+      stopLTC: stopLTC
+    )
+  }
+
+  func setUnlocked(_ unlocked: Bool) {
+    outputAccess.setUnlocked(unlocked)
+  }
+
+  @discardableResult
+  func start(mode: OutputMode, rate: FrameRateOption) -> Bool {
+    outputAccess.requestOutput {
+      switch mode {
+      case .mtc:
+        startMIDI(rate)
+      case .ltc:
+        startLTC(rate)
+      }
+    }
+  }
+
+  @discardableResult
+  func submit(
+    mode: OutputMode,
+    timecode: TimecodeValue,
+    rate: FrameRateOption,
+    inputCapturedAt: Date
+  ) -> Bool {
+    outputAccess.requestOutput {
+      switch mode {
+      case .mtc:
+        submitMIDI(timecode, rate, inputCapturedAt)
+      case .ltc:
+        submitLTC(timecode, rate, inputCapturedAt)
+      }
+    }
+  }
+
+  func stopAllOutput() {
+    outputAccess.stopAllOutput()
+  }
+}
+
 private struct ConversionSnapshot {
   let inputTimecode: TimecodeValue
   let inputRate: FrameRateOption
@@ -64,8 +128,9 @@ private struct LayoutMetrics {
 struct ContentView: View {
   @EnvironmentObject private var entitlementStore: EntitlementStore
   @StateObject private var midi = MIDIManager()
-  @StateObject private var midiOut = MIDIOutputManager()
-  @StateObject private var ltcOut = AudioLTCOutputManager()
+  @StateObject private var midiOut: MIDIOutputManager
+  @StateObject private var ltcOut: AudioLTCOutputManager
+  @StateObject private var outputPipeline: LiveOutputPipeline
   @StateObject private var audio = AudioLTCManager()
 
   @AppStorage(AppLanguageStore.storageKey) private var languageRaw = AppLanguage.english.rawValue
@@ -78,6 +143,36 @@ struct ContentView: View {
   @State private var outputMode: OutputMode = .mtc
   @State private var isRunning: Bool = true
   @State private var isPurchasePresented = false
+
+  init() {
+    let midiOutput = MIDIOutputManager()
+    let ltcOutput = AudioLTCOutputManager()
+
+    _midiOut = StateObject(wrappedValue: midiOutput)
+    _ltcOut = StateObject(wrappedValue: ltcOutput)
+    _outputPipeline = StateObject(
+      wrappedValue: LiveOutputPipeline(
+        startMIDI: { rate in midiOutput.startClock(rate: rate) },
+        stopMIDI: { midiOutput.stopClock() },
+        submitMIDI: { timecode, rate, capturedAt in
+          midiOutput.updatePosition(
+            tc: timecode,
+            rate: rate,
+            inputCapturedAt: capturedAt
+          )
+        },
+        startLTC: { rate in ltcOutput.startOutput(rate: rate) },
+        stopLTC: { ltcOutput.stopOutput() },
+        submitLTC: { timecode, rate, capturedAt in
+          ltcOutput.updateTimecode(
+            timecode,
+            rate: rate,
+            inputCapturedAt: capturedAt
+          )
+        }
+      )
+    )
+  }
 
   private var language: AppLanguage {
     AppLanguage(rawValue: languageRaw) ?? .english
@@ -185,9 +280,9 @@ struct ContentView: View {
           midiOut.selectedDestinationID = destID
         }
       }
+      outputPipeline.setUnlocked(entitlementStore.isProUnlocked)
       syncInputPipeline()
-      updateOutputPipeline()
-      midiOut.startClock(rate: outputRate)
+      updateOutputPipeline(presentPurchaseIfLocked: false)
     }
     .onChange(of: inputMode) { _ in
       syncInputPipeline()
@@ -195,29 +290,24 @@ struct ContentView: View {
     .onChange(of: outputRateID) { _ in
       midiOut.updateRate(outputRate)
     }
-    .onChange(of: outputMode) { mode in
-      switch mode {
-      case .mtc:
-        midiOut.startClock(rate: outputRate)
-        ltcOut.stopOutput()
-      case .ltc:
-        midiOut.stopClock()
-        ltcOut.startOutput(rate: outputRate)
-      }
+    .onChange(of: outputMode) { _ in
+      outputPipeline.stopAllOutput()
+      requestOutputStart()
     }
     .onChange(of: isRunning) { running in
       if running {
         syncInputPipeline()
-        if outputMode == .mtc {
-          midiOut.startClock(rate: outputRate)
-        } else {
-          ltcOut.startOutput(rate: outputRate)
-        }
+        requestOutputStart()
       } else {
         audio.stopMonitoring()
         midi.disconnect()
-        midiOut.stopClock()
-        ltcOut.stopOutput()
+        outputPipeline.stopAllOutput()
+      }
+    }
+    .onChange(of: entitlementStore.isProUnlocked) { isUnlocked in
+      outputPipeline.setUnlocked(isUnlocked)
+      if isUnlocked {
+        requestOutputStart(presentPurchaseIfLocked: false)
       }
     }
     .onReceive(audio.$receivedTimecode) { _ in
@@ -424,6 +514,10 @@ struct ContentView: View {
           outputModeBadge(metrics: metrics)
         }
 
+        if !entitlementStore.isProUnlocked {
+          lockedOutputStatus(metrics: metrics)
+        }
+
         if outputMode == .mtc {
           VStack(alignment: .leading, spacing: 8) {
             panelFieldTitle(t("OUTPUT DEVICE:", "输出设备："), metrics: metrics)
@@ -464,7 +558,11 @@ struct ContentView: View {
         if outputMode == .ltc {
           VStack(spacing: 10) {
             ltcOutputNotice(metrics: metrics)
-            ltcOutputDeviceMenu(metrics: metrics)
+            if entitlementStore.isProUnlocked {
+              ltcOutputDeviceMenu(metrics: metrics)
+            } else {
+              lockedOutputDeviceRow(metrics: metrics)
+            }
           }
         }
 
@@ -474,14 +572,39 @@ struct ContentView: View {
           accent: outputMode == .mtc
             ? Color(red: 1.0, green: 0.58, blue: 0.16)
             : .white.opacity(0.45),
-          subtext: outputMode == .mtc
-            ? (isRunning ? t("(active)", "(运行中)") : t("(paused)", "(已暂停)"))
-            : t("(not available)", "(暂不支持)"),
+          subtext: outputActivityText,
           dots: .orange,
           metrics: metrics
         )
       }
     }
+  }
+
+  private func lockedOutputStatus(metrics: LayoutMetrics) -> some View {
+    HStack(spacing: 8) {
+      Label(t("OUTPUT LOCKED", "输出已锁定"), systemImage: "lock.fill")
+        .font(.system(size: metrics.smallFont, weight: .bold, design: .rounded))
+        .foregroundStyle(Color(red: 1.0, green: 0.67, blue: 0.25))
+
+      Spacer(minLength: 8)
+
+      Button(t("Unlock Output", "解锁输出")) {
+        isPurchasePresented = true
+      }
+      .buttonStyle(.borderedProminent)
+      .controlSize(.small)
+      .tint(Color(red: 0.92, green: 0.43, blue: 0.12))
+    }
+    .padding(.horizontal, 10)
+    .padding(.vertical, 6)
+    .background(
+      RoundedRectangle(cornerRadius: 9, style: .continuous)
+        .fill(Color(red: 1.0, green: 0.52, blue: 0.16).opacity(0.1))
+    )
+    .overlay(
+      RoundedRectangle(cornerRadius: 9, style: .continuous)
+        .strokeBorder(Color(red: 1.0, green: 0.52, blue: 0.16).opacity(0.28), lineWidth: 1)
+    )
   }
 
   private func ltcOutputNotice(metrics: LayoutMetrics) -> some View {
@@ -665,27 +788,57 @@ struct ContentView: View {
     }
   }
 
+  @ViewBuilder
   private func outputDeviceRow(metrics: LayoutMetrics) -> some View {
-    HStack(spacing: 8) {
-      Menu {
-        ForEach(midiOut.destinations) { dest in
-          Button(dest.name) {
-            midiOut.selectedDestinationID = dest.id
+    if !entitlementStore.isProUnlocked {
+      lockedOutputDeviceRow(metrics: metrics)
+    } else {
+      HStack(spacing: 8) {
+        Menu {
+          ForEach(midiOut.destinations) { dest in
+            Button(dest.name) {
+              midiOut.selectedDestinationID = dest.id
+            }
           }
+        } label: {
+          dropdownLabel(
+            text: midiOut.selectedDestinationID.flatMap { id in
+              midiOut.destinations.first(where: { $0.id == id })?.name
+            } ?? t("No MIDI Output", "没有 MIDI 输出"),
+            metrics: metrics
+          )
         }
-      } label: {
-        dropdownLabel(
-          text: midiOut.selectedDestinationID.flatMap { id in
-            midiOut.destinations.first(where: { $0.id == id })?.name
-          } ?? t("No MIDI Output", "没有 MIDI 输出"),
-          metrics: metrics
-        )
-      }
 
-      refreshButton(metrics: metrics) {
-        midiOut.refreshDestinations()
+        refreshButton(metrics: metrics) {
+          midiOut.refreshDestinations()
+        }
       }
     }
+  }
+
+  private func lockedOutputDeviceRow(metrics: LayoutMetrics) -> some View {
+    HStack(spacing: 8) {
+      Label(t("Pro output device", "Pro 输出设备"), systemImage: "lock.fill")
+        .font(.system(size: metrics.bodyFont, weight: .semibold))
+        .foregroundStyle(.white.opacity(0.68))
+        .frame(maxWidth: .infinity, alignment: .leading)
+
+      Button(t("Unlock Output", "解锁输出")) {
+        isPurchasePresented = true
+      }
+      .buttonStyle(.bordered)
+      .controlSize(.small)
+    }
+    .padding(.horizontal, 12)
+    .frame(height: metrics.deviceButtonHeight)
+    .background(
+      RoundedRectangle(cornerRadius: 9, style: .continuous)
+        .fill(Color.white.opacity(0.05))
+    )
+    .overlay(
+      RoundedRectangle(cornerRadius: 9, style: .continuous)
+        .strokeBorder(Color.white.opacity(0.1), lineWidth: 1)
+    )
   }
 
   private func deviceDropdown(metrics: LayoutMetrics) -> some View {
@@ -1056,7 +1209,22 @@ struct ContentView: View {
   }
 
   private var outputStatusText: String {
-    midiOut.statusText
+    guard entitlementStore.isProUnlocked else {
+      return t("OUTPUT LOCKED", "输出已锁定")
+    }
+    switch outputMode {
+    case .mtc:
+      return midiOut.statusText
+    case .ltc:
+      return ltcOut.statusText
+    }
+  }
+
+  private var outputActivityText: String {
+    guard entitlementStore.isProUnlocked else {
+      return t("(locked)", "(已锁定)")
+    }
+    return isRunning ? t("(active)", "(运行中)") : t("(paused)", "(已暂停)")
   }
 
   private var latencyValueText: String {
@@ -1096,14 +1264,23 @@ struct ContentView: View {
     }
   }
 
-  private func updateOutputPipeline() {
+  private func updateOutputPipeline(presentPurchaseIfLocked: Bool = true) {
     midiOut.refreshDestinations()
-    midiOut.startClock(rate: outputRate)
+    requestOutputStart(presentPurchaseIfLocked: presentPurchaseIfLocked)
+  }
+
+  private func requestOutputStart(presentPurchaseIfLocked: Bool = true) {
+    guard isRunning else { return }
+    let allowed = outputPipeline.start(mode: outputMode, rate: outputRate)
+    if !allowed, presentPurchaseIfLocked {
+      isPurchasePresented = true
+    }
   }
 
   /// Feed the current output timecode position to the independent MTC output clock.
   /// The clock runs at outputRate.fps × 4 Hz and sends QF nibbles on its own timer.
   private func feedOutputClock() {
+    guard entitlementStore.isProUnlocked else { return }
     guard isRunning, let conversion else { return }
     let inputCapturedAt: Date
     switch inputMode {
@@ -1112,12 +1289,12 @@ struct ContentView: View {
     case .mtc:
       inputCapturedAt = midi.lastReceivedAt ?? Date()
     }
-    switch outputMode {
-    case .mtc:
-      midiOut.updatePosition(tc: conversion.outputTimecode, rate: outputRate, inputCapturedAt: inputCapturedAt)
-    case .ltc:
-      ltcOut.updateTimecode(conversion.outputTimecode, rate: outputRate, inputCapturedAt: inputCapturedAt)
-    }
+    outputPipeline.submit(
+      mode: outputMode,
+      timecode: conversion.outputTimecode,
+      rate: outputRate,
+      inputCapturedAt: inputCapturedAt
+    )
   }
 }
 
