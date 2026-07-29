@@ -3,6 +3,58 @@ import XCTest
 
 @MainActor
 final class EntitlementStoreStateTests: XCTestCase {
+  func testRepeatedStartRetriesMissingProductAndRefreshesWithoutNewListener() {
+    let actions = EntitlementStore.startActions(
+      hasTransactionUpdatesTask: true,
+      hasProduct: false
+    )
+
+    XCTAssertFalse(actions.shouldCreateTransactionUpdatesTask)
+    XCTAssertTrue(actions.shouldLoadProduct)
+    XCTAssertTrue(actions.shouldRefreshEntitlements)
+  }
+
+  func testRepeatedStartRefreshesEntitlementsWhenProductIsAlreadyLoaded() {
+    let actions = EntitlementStore.startActions(
+      hasTransactionUpdatesTask: true,
+      hasProduct: true
+    )
+
+    XCTAssertFalse(actions.shouldCreateTransactionUpdatesTask)
+    XCTAssertFalse(actions.shouldLoadProduct)
+    XCTAssertTrue(actions.shouldRefreshEntitlements)
+  }
+
+  func testStaleRefreshGenerationCannotOverwriteNewerState() {
+    let state = EntitlementStore.entitlementState(
+      after: .resolved(.unlocked),
+      currentState: .locked,
+      refreshGeneration: 1,
+      latestRefreshGeneration: 2
+    )
+
+    XCTAssertNil(state)
+  }
+
+  func testLatestRefreshGenerationAppliesResolvedState() {
+    let state = EntitlementStore.entitlementState(
+      after: .resolved(.locked),
+      currentState: .unlocked,
+      refreshGeneration: 2,
+      latestRefreshGeneration: 2
+    )
+
+    XCTAssertEqual(state, .locked)
+  }
+
+  func testNonProTransactionUpdateIsIgnored() {
+    XCTAssertFalse(
+      EntitlementStore.shouldHandleTransactionUpdate(
+        productID: "com.luoxiliu.xtc.future-product"
+      )
+    )
+  }
+
   func testFailedRefreshPreservesExistingUnlock() {
     let state = EntitlementStore.entitlementState(
       after: .failed,

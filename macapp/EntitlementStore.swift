@@ -29,6 +29,12 @@ final class EntitlementStore: ObservableObject, EntitlementProviding {
     let shouldRefreshEntitlements: Bool
   }
 
+  struct StartActions {
+    let shouldCreateTransactionUpdatesTask: Bool
+    let shouldLoadProduct: Bool
+    let shouldRefreshEntitlements: Bool
+  }
+
   static let shared = EntitlementStore()
 
   @Published private(set) var entitlementState: ProEntitlementState = .loading
@@ -44,28 +50,29 @@ final class EntitlementStore: ObservableObject, EntitlementProviding {
   }
 
   private var transactionUpdatesTask: Task<Void, Never>?
+  private var entitlementRefreshGeneration: UInt = 0
 
   deinit {
     transactionUpdatesTask?.cancel()
   }
 
   func start() async {
-    guard transactionUpdatesTask == nil else {
-      return
+    let actions = Self.startActions(
+      hasTransactionUpdatesTask: transactionUpdatesTask != nil,
+      hasProduct: product != nil
+    )
+
+    if actions.shouldCreateTransactionUpdatesTask {
+      startTransactionUpdatesListener()
     }
 
-    transactionUpdatesTask = Task { [weak self] in
-      for await verificationResult in StoreKit.Transaction.updates {
-        guard !Task.isCancelled else {
-          return
-        }
-        await self?.handle(transactionUpdate: verificationResult)
-      }
+    if actions.shouldLoadProduct {
+      async let productLoad: Void = loadProduct()
+      async let entitlementRefresh: Void = refreshEntitlements()
+      _ = await (productLoad, entitlementRefresh)
+    } else if actions.shouldRefreshEntitlements {
+      await refreshEntitlements()
     }
-
-    async let productLoad: Void = loadProduct()
-    async let entitlementRefresh: Void = refreshEntitlements()
-    _ = await (productLoad, entitlementRefresh)
   }
 
   func loadProduct() async {
@@ -90,6 +97,8 @@ final class EntitlementStore: ObservableObject, EntitlementProviding {
   }
 
   func refreshEntitlements() async {
+    entitlementRefreshGeneration &+= 1
+    let refreshGeneration = entitlementRefreshGeneration
     var currentProductIDs = Set<String>()
     var revokedProductIDs = Set<String>()
     var encounteredUnverifiedProTransaction = false
@@ -127,10 +136,15 @@ final class EntitlementStore: ObservableObject, EntitlementProviding {
       )
     }
 
-    entitlementState = Self.entitlementState(
+    guard let refreshedState = Self.entitlementState(
       after: outcome,
-      currentState: entitlementState
-    )
+      currentState: entitlementState,
+      refreshGeneration: refreshGeneration,
+      latestRefreshGeneration: entitlementRefreshGeneration
+    ) else {
+      return
+    }
+    entitlementState = refreshedState
   }
 
   func purchase() async {
@@ -200,6 +214,33 @@ final class EntitlementStore: ObservableObject, EntitlementProviding {
     }
   }
 
+  static func entitlementState(
+    after outcome: EntitlementRefreshOutcome,
+    currentState: ProEntitlementState,
+    refreshGeneration: UInt,
+    latestRefreshGeneration: UInt
+  ) -> ProEntitlementState? {
+    guard refreshGeneration == latestRefreshGeneration else {
+      return nil
+    }
+    return entitlementState(after: outcome, currentState: currentState)
+  }
+
+  static func startActions(
+    hasTransactionUpdatesTask: Bool,
+    hasProduct: Bool
+  ) -> StartActions {
+    StartActions(
+      shouldCreateTransactionUpdatesTask: !hasTransactionUpdatesTask,
+      shouldLoadProduct: !hasProduct,
+      shouldRefreshEntitlements: true
+    )
+  }
+
+  static func shouldHandleTransactionUpdate(productID: String) -> Bool {
+    productID == EntitlementSnapshot.proProductID
+  }
+
   static func purchaseResolution(
     for outcome: PurchaseOutcome
   ) -> PurchaseResolution {
@@ -237,6 +278,21 @@ final class EntitlementStore: ObservableObject, EntitlementProviding {
     }
   }
 
+  private func startTransactionUpdatesListener() {
+    transactionUpdatesTask = Task { @MainActor [weak self] in
+      defer {
+        self?.transactionUpdatesTask = nil
+      }
+
+      for await verificationResult in StoreKit.Transaction.updates {
+        guard !Task.isCancelled else {
+          return
+        }
+        await self?.handle(transactionUpdate: verificationResult)
+      }
+    }
+  }
+
   private func apply(
     purchaseResolution: PurchaseResolution,
     verifiedTransaction: StoreKit.Transaction? = nil
@@ -254,6 +310,12 @@ final class EntitlementStore: ObservableObject, EntitlementProviding {
   private func handle(
     transactionUpdate: VerificationResult<StoreKit.Transaction>
   ) async {
+    guard Self.shouldHandleTransactionUpdate(
+      productID: transactionUpdate.unsafePayloadValue.productID
+    ) else {
+      return
+    }
+
     switch transactionUpdate {
     case .verified(let transaction):
       await refreshEntitlements()
