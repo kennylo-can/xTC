@@ -31,6 +31,8 @@
 		100000000000000000000022 /* CoreAudio.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 200000000000000000000023 /* CoreAudio.framework */; };
 		100000000000000000000023 /* AVFAudio.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 200000000000000000000024 /* AVFAudio.framework */; };
 		100000000000000000000024 /* XCTest.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 200000000000000000000025 /* XCTest.framework */; };
+		100000000000000000000025 /* EntitlementStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000028 /* EntitlementStateTests.swift */; };
+		100000000000000000000026 /* EntitlementProviding.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000029 /* EntitlementProviding.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -61,6 +63,8 @@
 		200000000000000000000025 /* XCTest.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = XCTest.framework; path = System/Library/Frameworks/XCTest.framework; sourceTree = SDKROOT; };
 		200000000000000000000026 /* xTC.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = xTC.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		200000000000000000000027 /* xTCTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = xTCTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		200000000000000000000028 /* EntitlementStateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EntitlementStateTests.swift; sourceTree = "<group>"; };
+		200000000000000000000029 /* EntitlementProviding.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EntitlementProviding.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -82,10 +86,12 @@
 			300000000000000000000002 /* macapp */,
 			300000000000000000000003 /* libltc */,
 			300000000000000000000004 /* xTC */,
+			300000000000000000000008 /* xTCTests */,
 			300000000000000000000005 /* Frameworks */,
 			300000000000000000000006 /* Products */,
 		); sourceTree = "<group>"; };
 		300000000000000000000002 /* macapp */ = {isa = PBXGroup; children = (
+			200000000000000000000029 /* EntitlementProviding.swift */,
 			200000000000000000000001 /* xTCApp.swift */,
 			200000000000000000000002 /* Localization.swift */,
 			200000000000000000000003 /* AppIconSupport.swift */,
@@ -125,6 +131,9 @@
 			200000000000000000000017 /* PrivacyInfo.xcprivacy */,
 			200000000000000000000018 /* ThirdPartyNotices.md */,
 		); name = Resources; path = Resources; sourceTree = "<group>"; };
+		300000000000000000000008 /* xTCTests */ = {isa = PBXGroup; children = (
+			200000000000000000000028 /* EntitlementStateTests.swift */,
+		); name = xTCTests; path = xTCTests; sourceTree = "<group>"; };
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
@@ -160,6 +169,7 @@
 
 /* Begin PBXSourcesBuildPhase section */
 		600000000000000000000001 /* Sources */ = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (
+			100000000000000000000026 /* EntitlementProviding.swift in Sources */,
 			100000000000000000000001 /* xTCApp.swift in Sources */,
 			100000000000000000000002 /* Localization.swift in Sources */,
 			100000000000000000000003 /* AppIconSupport.swift in Sources */,
@@ -176,7 +186,9 @@
 			100000000000000000000014 /* ltc.c in Sources */,
 			100000000000000000000015 /* timecode.c in Sources */,
 		); runOnlyForDeploymentPostprocessing = 0; };
-		600000000000000000000004 /* Sources */ = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+		600000000000000000000004 /* Sources */ = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (
+			100000000000000000000025 /* EntitlementStateTests.swift in Sources */,
+		); runOnlyForDeploymentPostprocessing = 0; };
 /* End PBXSourcesBuildPhase section */
 
 /* Begin XCBuildConfiguration section */
@@ -187,6 +199,7 @@
 			CODE_SIGN_ENTITLEMENTS = xTC/xTC.entitlements;
 			CODE_SIGN_STYLE = Automatic;
 			DEFINES_MODULE = YES;
+			ENABLE_TESTABILITY = YES;
 			ENABLE_HARDENED_RUNTIME = YES;
 			HEADER_SEARCH_PATHS = "$(SRCROOT)/vendor/libltc";
 			INFOPLIST_FILE = xTC/Info.plist;
