@@ -49,9 +49,6 @@
             ReferencedContainer = "container:xTC.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
-      <StoreKitConfigurationFileReference
-         identifier = "container:xTC.xcodeproj/xTC/StoreKit/xTC.storekit">
-      </StoreKitConfigurationFileReference>
    </LaunchAction>
    <ProfileAction
       buildConfiguration = "Release"
