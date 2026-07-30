@@ -225,8 +225,8 @@
 /* End PBXSourcesBuildPhase section */
 
 /* Begin XCBuildConfiguration section */
-		700000000000000000000001 /* Debug */ = {isa = XCBuildConfiguration; buildSettings = { CLANG_C_LANGUAGE_STANDARD = gnu17; CLANG_ENABLE_MODULES = YES; GCC_C_LANGUAGE_STANDARD = gnu99; MACOSX_DEPLOYMENT_TARGET = 13.0; SDKROOT = macosx; }; name = Debug; };
-		700000000000000000000002 /* Release */ = {isa = XCBuildConfiguration; buildSettings = { CLANG_C_LANGUAGE_STANDARD = gnu17; CLANG_ENABLE_MODULES = YES; GCC_C_LANGUAGE_STANDARD = gnu99; MACOSX_DEPLOYMENT_TARGET = 13.0; SDKROOT = macosx; }; name = Release; };
+		700000000000000000000001 /* Debug */ = {isa = XCBuildConfiguration; buildSettings = { CLANG_C_LANGUAGE_STANDARD = gnu17; CLANG_ENABLE_MODULES = YES; GCC_C_LANGUAGE_STANDARD = gnu99; MACOSX_DEPLOYMENT_TARGET = 15.0; SDKROOT = macosx; }; name = Debug; };
+		700000000000000000000002 /* Release */ = {isa = XCBuildConfiguration; buildSettings = { CLANG_C_LANGUAGE_STANDARD = gnu17; CLANG_ENABLE_MODULES = YES; GCC_C_LANGUAGE_STANDARD = gnu99; MACOSX_DEPLOYMENT_TARGET = 15.0; SDKROOT = macosx; }; name = Release; };
 		700000000000000000000003 /* Debug */ = {isa = XCBuildConfiguration; buildSettings = {
 			ARCHS = arm64;
 			CODE_SIGN_ENTITLEMENTS = xTC/xTC.entitlements;
@@ -237,7 +237,7 @@
 			HEADER_SEARCH_PATHS = "$(SRCROOT)/vendor/libltc";
 			INFOPLIST_FILE = xTC/Info.plist;
 			LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/../Frameworks";
-			MACOSX_DEPLOYMENT_TARGET = 13.0;
+			MACOSX_DEPLOYMENT_TARGET = 15.0;
 			ONLY_ACTIVE_ARCH = YES;
 			PRODUCT_BUNDLE_IDENTIFIER = com.luoxiliu.xtc;
 			PRODUCT_NAME = "$(TARGET_NAME)";
@@ -253,14 +253,14 @@
 			HEADER_SEARCH_PATHS = "$(SRCROOT)/vendor/libltc";
 			INFOPLIST_FILE = xTC/Info.plist;
 			LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/../Frameworks";
-			MACOSX_DEPLOYMENT_TARGET = 13.0;
+			MACOSX_DEPLOYMENT_TARGET = 15.0;
 			PRODUCT_BUNDLE_IDENTIFIER = com.luoxiliu.xtc;
 			PRODUCT_NAME = "$(TARGET_NAME)";
 			SWIFT_OBJC_BRIDGING_HEADER = macapp/LTCBridge.h;
 			SWIFT_VERSION = 5.0;
 		}; name = Release; };
-		700000000000000000000005 /* Debug */ = {isa = XCBuildConfiguration; buildSettings = { ARCHS = arm64; BUNDLE_LOADER = "$(TEST_HOST)"; MACOSX_DEPLOYMENT_TARGET = 13.0; PRODUCT_BUNDLE_IDENTIFIER = com.luoxiliu.xtc.tests; PRODUCT_NAME = "$(TARGET_NAME)"; SDKROOT = macosx; SUPPORTED_PLATFORMS = macosx; SWIFT_VERSION = 5.0; TEST_HOST = "$(BUILT_PRODUCTS_DIR)/xTC.app/Contents/MacOS/xTC"; }; name = Debug; };
-		700000000000000000000006 /* Release */ = {isa = XCBuildConfiguration; buildSettings = { ARCHS = arm64; BUNDLE_LOADER = "$(TEST_HOST)"; MACOSX_DEPLOYMENT_TARGET = 13.0; PRODUCT_BUNDLE_IDENTIFIER = com.luoxiliu.xtc.tests; PRODUCT_NAME = "$(TARGET_NAME)"; SDKROOT = macosx; SUPPORTED_PLATFORMS = macosx; SWIFT_VERSION = 5.0; TEST_HOST = "$(BUILT_PRODUCTS_DIR)/xTC.app/Contents/MacOS/xTC"; }; name = Release; };
+		700000000000000000000005 /* Debug */ = {isa = XCBuildConfiguration; buildSettings = { ARCHS = arm64; BUNDLE_LOADER = "$(TEST_HOST)"; MACOSX_DEPLOYMENT_TARGET = 15.0; PRODUCT_BUNDLE_IDENTIFIER = com.luoxiliu.xtc.tests; PRODUCT_NAME = "$(TARGET_NAME)"; SDKROOT = macosx; SUPPORTED_PLATFORMS = macosx; SWIFT_VERSION = 5.0; TEST_HOST = "$(BUILT_PRODUCTS_DIR)/xTC.app/Contents/MacOS/xTC"; }; name = Debug; };
+		700000000000000000000006 /* Release */ = {isa = XCBuildConfiguration; buildSettings = { ARCHS = arm64; BUNDLE_LOADER = "$(TEST_HOST)"; MACOSX_DEPLOYMENT_TARGET = 15.0; PRODUCT_BUNDLE_IDENTIFIER = com.luoxiliu.xtc.tests; PRODUCT_NAME = "$(TARGET_NAME)"; SDKROOT = macosx; SUPPORTED_PLATFORMS = macosx; SWIFT_VERSION = 5.0; TEST_HOST = "$(BUILT_PRODUCTS_DIR)/xTC.app/Contents/MacOS/xTC"; }; name = Release; };
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */

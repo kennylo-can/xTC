@@ -27,7 +27,7 @@
   <key>ITSAppUsesNonExemptEncryption</key>
   <false/>
   <key>LSMinimumSystemVersion</key>
-  <string>13.0</string>
+  <string>15.0</string>
   <key>NSMicrophoneUsageDescription</key>
   <string>xTC uses audio input to decode LTC timecode.</string>
   <key>NSPrincipalClass</key>
