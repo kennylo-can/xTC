@@ -299,6 +299,16 @@ final class EntitlementStore: ObservableObject, EntitlementProviding {
   ) async {
     purchaseState = purchaseResolution.purchaseState
 
+    // A verified non-consumable purchase is immediately entitled. Refreshing
+    // currentEntitlements below remains the source of truth for relaunch and
+    // restore, but updating here keeps the purchase sheet responsive in the
+    // local StoreKit test environment as well as in Sandbox.
+    if let verifiedTransaction,
+       verifiedTransaction.productID == EntitlementSnapshot.proProductID,
+       verifiedTransaction.revocationDate == nil {
+      entitlementState = .unlocked
+    }
+
     if purchaseResolution.shouldFinish {
       await verifiedTransaction?.finish()
     }
