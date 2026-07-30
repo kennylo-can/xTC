@@ -24,6 +24,7 @@
 		100000000000000000000015 /* timecode.c in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000016 /* timecode.c */; };
 		100000000000000000000016 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000017 /* PrivacyInfo.xcprivacy */; };
 		100000000000000000000017 /* ThirdPartyNotices.md in Resources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000018 /* ThirdPartyNotices.md */; };
+		100000000000000000000033 /* AppIcon.png in Resources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000037 /* AppIcon.png */; };
 		100000000000000000000018 /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 200000000000000000000019 /* SwiftUI.framework */; };
 		100000000000000000000019 /* AppKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 200000000000000000000020 /* AppKit.framework */; };
 		100000000000000000000020 /* StoreKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 200000000000000000000021 /* StoreKit.framework */; };
@@ -60,6 +61,7 @@
 		200000000000000000000016 /* timecode.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = timecode.c; sourceTree = "<group>"; };
 		200000000000000000000017 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		200000000000000000000018 /* ThirdPartyNotices.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = ThirdPartyNotices.md; sourceTree = "<group>"; };
+		200000000000000000000037 /* AppIcon.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = AppIcon.png; sourceTree = "<group>"; };
 		200000000000000000000019 /* SwiftUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SwiftUI.framework; path = System/Library/Frameworks/SwiftUI.framework; sourceTree = SDKROOT; };
 		200000000000000000000020 /* AppKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AppKit.framework; path = System/Library/Frameworks/AppKit.framework; sourceTree = SDKROOT; };
 		200000000000000000000021 /* StoreKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = StoreKit.framework; path = System/Library/Frameworks/StoreKit.framework; sourceTree = SDKROOT; };
@@ -145,6 +147,7 @@
 			200000000000000000000027 /* xTCTests.xctest */,
 		); name = Products; sourceTree = "<group>"; };
 		300000000000000000000007 /* Resources */ = {isa = PBXGroup; children = (
+			200000000000000000000037 /* AppIcon.png */,
 			200000000000000000000017 /* PrivacyInfo.xcprivacy */,
 			200000000000000000000018 /* ThirdPartyNotices.md */,
 		); name = Resources; path = Resources; sourceTree = "<group>"; };
@@ -187,6 +190,7 @@
 		600000000000000000000003 /* Resources */ = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (
 			100000000000000000000016 /* PrivacyInfo.xcprivacy in Resources */,
 			100000000000000000000017 /* ThirdPartyNotices.md in Resources */,
+			100000000000000000000033 /* AppIcon.png in Resources */,
 		); runOnlyForDeploymentPostprocessing = 0; };
 /* End PBXResourcesBuildPhase section */
 

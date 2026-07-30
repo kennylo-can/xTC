@@ -7,6 +7,10 @@ enum AppIconSupport {
        let image = NSImage(contentsOfFile: path) {
       return image
     }
+    if let path = Bundle.main.path(forResource: "AppIcon", ofType: "png"),
+       let image = NSImage(contentsOfFile: path) {
+      return image
+    }
     return NSImage(named: NSImage.applicationIconName) ?? NSImage()
   }
 
