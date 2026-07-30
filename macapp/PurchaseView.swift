@@ -57,18 +57,29 @@ struct PurchaseView: View {
 
   private var purchaseContent: some View {
     VStack(alignment: .leading, spacing: 18) {
-      VStack(alignment: .leading, spacing: 8) {
-        Text(t("Unlock xTC Pro", "解锁 xTC Pro"))
-          .font(.title2.weight(.bold))
+      HStack(alignment: .top, spacing: 12) {
+        VStack(alignment: .leading, spacing: 8) {
+          Text(t("Unlock xTC Pro", "解锁 xTC Pro"))
+            .font(.title2.weight(.bold))
 
-        Text(
-          t(
-            "Unlock real LTC audio and MTC output permanently. Timecode reading and preview stay available to everyone.",
-            "永久解锁真实 LTC 音频和 MTC 输出。时间码读取与预览始终免费可用。"
+          Text(
+            t(
+              "Unlock real LTC audio and MTC output permanently. Timecode reading and preview stay available to everyone.",
+              "永久解锁真实 LTC 音频和 MTC 输出。时间码读取与预览始终免费可用。"
+            )
           )
-        )
-        .foregroundStyle(.secondary)
-        .fixedSize(horizontal: false, vertical: true)
+          .foregroundStyle(.secondary)
+          .fixedSize(horizontal: false, vertical: true)
+        }
+
+        Spacer(minLength: 8)
+
+        Button(t("Cancel", "取消")) {
+          dismiss()
+        }
+        .keyboardShortcut(.cancelAction)
+        .buttonStyle(.bordered)
+        .controlSize(.small)
       }
 
       purchaseStateMessage
