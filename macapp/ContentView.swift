@@ -415,13 +415,22 @@ struct ContentView: View {
 
       Spacer(minLength: 12)
 
-      if !entitlementStore.isProUnlocked {
-        Button(t("Unlock Pro", "解锁 Pro")) {
+      Button {
+        if !entitlementStore.isProUnlocked {
           isPurchasePresented = true
         }
-        .buttonStyle(.bordered)
-        .controlSize(.small)
+      } label: {
+        Label(
+          entitlementStore.isProUnlocked
+            ? t("Pro Unlocked", "Pro 已解锁")
+            : t("Unlock Pro", "解锁 Pro"),
+          systemImage: entitlementStore.isProUnlocked ? "checkmark.seal.fill" : "lock.open.fill"
+        )
       }
+      .buttonStyle(.bordered)
+      .controlSize(.small)
+      .tint(entitlementStore.isProUnlocked ? .green : nil)
+      .disabled(entitlementStore.isProUnlocked)
 
       Text(language == .simplifiedChinese ? "简体中文" : "English")
         .font(.system(size: metrics.smallFont, weight: .semibold, design: .rounded))
