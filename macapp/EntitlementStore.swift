@@ -312,7 +312,10 @@ final class EntitlementStore: ObservableObject, EntitlementProviding {
     if purchaseResolution.shouldFinish {
       await verifiedTransaction?.finish()
     }
-    if purchaseResolution.shouldRefreshEntitlements {
+    // The verified transaction itself is authoritative for this purchase.
+    // In the local StoreKit environment, currentEntitlements can lag for a
+    // moment and would otherwise overwrite the just-granted state with locked.
+    if purchaseResolution.shouldRefreshEntitlements, verifiedTransaction == nil {
       await refreshEntitlements()
     }
   }
