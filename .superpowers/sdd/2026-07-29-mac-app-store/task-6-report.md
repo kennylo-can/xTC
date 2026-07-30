@@ -86,3 +86,13 @@ the approved test-runner permission resolved that environmental restriction.
   non-interactive task run.
 - Existing CoreAudio HAL and vendor `libltc` warnings remain visible during
   command-line builds; they did not prevent the app build or 24-test suite.
+
+## Follow-up Review Fix
+
+- Changed the app scene from `WindowGroup` to the singleton `Window("xTC", id:
+  "main")`, so the app cannot open a second ContentView with a duplicate real
+  input/output pipeline.
+- The eager manager construction inside `ContentView.init` remains a known
+  risk and is intentionally deferred for a larger app-scoped coordinator
+  refactor; this follow-up keeps the requested fix minimal.
+- Final Debug app artifact: `/Users/luoxiliu/Documents/xTC/.worktrees/mac-app-store/build/xTC-AppStore-Debug/xTC.app`

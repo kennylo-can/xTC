@@ -7,7 +7,7 @@ struct xTCApp: App {
   @StateObject private var entitlementStore = EntitlementStore.shared
 
   var body: some Scene {
-    WindowGroup {
+    Window("xTC", id: "main") {
       ContentView()
         .environmentObject(entitlementStore)
         .task {
