@@ -3,7 +3,7 @@
 	archiveVersion = 1;
 	classes = {
 	};
-	objectVersion = 77;
+	objectVersion = 71;
 	objects = {
 
 /* Begin PBXBuildFile section */
@@ -24,7 +24,6 @@
 		100000000000000000000015 /* timecode.c in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000016 /* timecode.c */; };
 		100000000000000000000016 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000017 /* PrivacyInfo.xcprivacy */; };
 		100000000000000000000017 /* ThirdPartyNotices.md in Resources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000018 /* ThirdPartyNotices.md */; };
-		100000000000000000000033 /* AppIcon.png in Resources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000037 /* AppIcon.png */; };
 		100000000000000000000018 /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 200000000000000000000019 /* SwiftUI.framework */; };
 		100000000000000000000019 /* AppKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 200000000000000000000020 /* AppKit.framework */; };
 		100000000000000000000020 /* StoreKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 200000000000000000000021 /* StoreKit.framework */; };
@@ -40,7 +39,18 @@
 		100000000000000000000030 /* EntitlementStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000034 /* EntitlementStore.swift */; };
 		100000000000000000000031 /* PurchaseView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000035 /* PurchaseView.swift */; };
 		100000000000000000000032 /* TimecodePreviewTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000036 /* TimecodePreviewTests.swift */; };
+		100000000000000000000034 /* AppIcon.icns in Resources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000038 /* AppIcon.icns */; };
 /* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		900000000000000000000001 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 400000000000000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 500000000000000000000001;
+			remoteInfo = xTC;
+		};
+/* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
 		200000000000000000000001 /* xTCApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = xTCApp.swift; sourceTree = "<group>"; };
@@ -61,7 +71,6 @@
 		200000000000000000000016 /* timecode.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = timecode.c; sourceTree = "<group>"; };
 		200000000000000000000017 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		200000000000000000000018 /* ThirdPartyNotices.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = ThirdPartyNotices.md; sourceTree = "<group>"; };
-		200000000000000000000037 /* AppIcon.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = AppIcon.png; sourceTree = "<group>"; };
 		200000000000000000000019 /* SwiftUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SwiftUI.framework; path = System/Library/Frameworks/SwiftUI.framework; sourceTree = SDKROOT; };
 		200000000000000000000020 /* AppKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AppKit.framework; path = System/Library/Frameworks/AppKit.framework; sourceTree = SDKROOT; };
 		200000000000000000000021 /* StoreKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = StoreKit.framework; path = System/Library/Frameworks/StoreKit.framework; sourceTree = SDKROOT; };
@@ -80,199 +89,416 @@
 		200000000000000000000034 /* EntitlementStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EntitlementStore.swift; sourceTree = "<group>"; };
 		200000000000000000000035 /* PurchaseView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PurchaseView.swift; sourceTree = "<group>"; };
 		200000000000000000000036 /* TimecodePreviewTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimecodePreviewTests.swift; sourceTree = "<group>"; };
+		200000000000000000000037 /* AppIcon.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = AppIcon.png; sourceTree = "<group>"; };
+		200000000000000000000038 /* AppIcon.icns */ = {isa = PBXFileReference; lastKnownFileType = image.icns; path = AppIcon.icns; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
-		600000000000000000000002 /* Frameworks */ = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (
-			100000000000000000000018 /* SwiftUI.framework in Frameworks */,
-			100000000000000000000019 /* AppKit.framework in Frameworks */,
-			100000000000000000000020 /* StoreKit.framework in Frameworks */,
-			100000000000000000000021 /* CoreMIDI.framework in Frameworks */,
-			100000000000000000000022 /* CoreAudio.framework in Frameworks */,
-			100000000000000000000023 /* AVFAudio.framework in Frameworks */,
-		); runOnlyForDeploymentPostprocessing = 0; };
-		600000000000000000000005 /* Frameworks */ = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (
-			100000000000000000000024 /* XCTest.framework in Frameworks */,
-		); runOnlyForDeploymentPostprocessing = 0; };
+		600000000000000000000002 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				100000000000000000000018 /* SwiftUI.framework in Frameworks */,
+				100000000000000000000019 /* AppKit.framework in Frameworks */,
+				100000000000000000000020 /* StoreKit.framework in Frameworks */,
+				100000000000000000000021 /* CoreMIDI.framework in Frameworks */,
+				100000000000000000000022 /* CoreAudio.framework in Frameworks */,
+				100000000000000000000023 /* AVFAudio.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		600000000000000000000005 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				100000000000000000000024 /* XCTest.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
-		300000000000000000000001 = {isa = PBXGroup; children = (
-			300000000000000000000002 /* macapp */,
-			300000000000000000000003 /* libltc */,
-			300000000000000000000004 /* xTC */,
-			300000000000000000000008 /* xTCTests */,
-			300000000000000000000005 /* Frameworks */,
-			300000000000000000000006 /* Products */,
-		); sourceTree = "<group>"; };
-		300000000000000000000002 /* macapp */ = {isa = PBXGroup; children = (
-			200000000000000000000029 /* EntitlementProviding.swift */,
-			200000000000000000000034 /* EntitlementStore.swift */,
-			200000000000000000000035 /* PurchaseView.swift */,
-			200000000000000000000031 /* OutputAccessController.swift */,
-			200000000000000000000001 /* xTCApp.swift */,
-			200000000000000000000002 /* Localization.swift */,
-			200000000000000000000003 /* AppIconSupport.swift */,
-			200000000000000000000004 /* WindowSizer.swift */,
-			200000000000000000000005 /* ContentView.swift */,
-			200000000000000000000006 /* AudioLTCManager.swift */,
-			200000000000000000000007 /* AudioLTCOutputManager.swift */,
-			200000000000000000000008 /* TimecodeMath.swift */,
-			200000000000000000000009 /* MIDIManager.swift */,
-			200000000000000000000010 /* MIDIOutputManager.swift */,
-			200000000000000000000011 /* LTCBridge.c */,
-			200000000000000000000012 /* LTCBridge.h */,
-		); name = macapp; path = macapp; sourceTree = "<group>"; };
-		300000000000000000000003 /* libltc */ = {isa = PBXGroup; children = (
-			200000000000000000000013 /* decoder.c */,
-			200000000000000000000014 /* encoder.c */,
-			200000000000000000000015 /* ltc.c */,
-			200000000000000000000016 /* timecode.c */,
-		); name = libltc; path = vendor/libltc; sourceTree = "<group>"; };
-		300000000000000000000004 /* xTC */ = {isa = PBXGroup; children = (
-			300000000000000000000007 /* Resources */,
-			300000000000000000000009 /* StoreKit */,
-		); name = xTC; path = xTC; sourceTree = "<group>"; };
-		300000000000000000000005 /* Frameworks */ = {isa = PBXGroup; children = (
-			200000000000000000000019 /* SwiftUI.framework */,
-			200000000000000000000020 /* AppKit.framework */,
-			200000000000000000000021 /* StoreKit.framework */,
-			200000000000000000000022 /* CoreMIDI.framework */,
-			200000000000000000000023 /* CoreAudio.framework */,
-			200000000000000000000024 /* AVFAudio.framework */,
-			200000000000000000000025 /* XCTest.framework */,
-		); name = Frameworks; sourceTree = "<group>"; };
-		300000000000000000000006 /* Products */ = {isa = PBXGroup; children = (
-			200000000000000000000026 /* xTC.app */,
-			200000000000000000000027 /* xTCTests.xctest */,
-		); name = Products; sourceTree = "<group>"; };
-		300000000000000000000007 /* Resources */ = {isa = PBXGroup; children = (
-			200000000000000000000037 /* AppIcon.png */,
-			200000000000000000000017 /* PrivacyInfo.xcprivacy */,
-			200000000000000000000018 /* ThirdPartyNotices.md */,
-		); name = Resources; path = Resources; sourceTree = "<group>"; };
-		300000000000000000000008 /* xTCTests */ = {isa = PBXGroup; children = (
-			200000000000000000000028 /* EntitlementStateTests.swift */,
-			200000000000000000000030 /* OutputAccessControllerTests.swift */,
-			200000000000000000000033 /* EntitlementStoreStateTests.swift */,
-			200000000000000000000036 /* TimecodePreviewTests.swift */,
-		); name = xTCTests; path = xTCTests; sourceTree = "<group>"; };
-		300000000000000000000009 /* StoreKit */ = {isa = PBXGroup; children = (
-			200000000000000000000032 /* xTC.storekit */,
-		); name = StoreKit; path = StoreKit; sourceTree = "<group>"; };
+		300000000000000000000001 = {
+			isa = PBXGroup;
+			children = (
+				300000000000000000000002 /* macapp */,
+				300000000000000000000003 /* libltc */,
+				300000000000000000000004 /* xTC */,
+				300000000000000000000008 /* xTCTests */,
+				300000000000000000000005 /* Frameworks */,
+				300000000000000000000006 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		300000000000000000000002 /* macapp */ = {
+			isa = PBXGroup;
+			children = (
+				200000000000000000000029 /* EntitlementProviding.swift */,
+				200000000000000000000034 /* EntitlementStore.swift */,
+				200000000000000000000035 /* PurchaseView.swift */,
+				200000000000000000000031 /* OutputAccessController.swift */,
+				200000000000000000000001 /* xTCApp.swift */,
+				200000000000000000000002 /* Localization.swift */,
+				200000000000000000000003 /* AppIconSupport.swift */,
+				200000000000000000000004 /* WindowSizer.swift */,
+				200000000000000000000005 /* ContentView.swift */,
+				200000000000000000000006 /* AudioLTCManager.swift */,
+				200000000000000000000007 /* AudioLTCOutputManager.swift */,
+				200000000000000000000008 /* TimecodeMath.swift */,
+				200000000000000000000009 /* MIDIManager.swift */,
+				200000000000000000000010 /* MIDIOutputManager.swift */,
+				200000000000000000000011 /* LTCBridge.c */,
+				200000000000000000000012 /* LTCBridge.h */,
+			);
+			path = macapp;
+			sourceTree = "<group>";
+		};
+		300000000000000000000003 /* libltc */ = {
+			isa = PBXGroup;
+			children = (
+				200000000000000000000013 /* decoder.c */,
+				200000000000000000000014 /* encoder.c */,
+				200000000000000000000015 /* ltc.c */,
+				200000000000000000000016 /* timecode.c */,
+			);
+			name = libltc;
+			path = vendor/libltc;
+			sourceTree = "<group>";
+		};
+		300000000000000000000004 /* xTC */ = {
+			isa = PBXGroup;
+			children = (
+				300000000000000000000007 /* Resources */,
+				300000000000000000000009 /* StoreKit */,
+			);
+			path = xTC;
+			sourceTree = "<group>";
+		};
+		300000000000000000000005 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				200000000000000000000019 /* SwiftUI.framework */,
+				200000000000000000000020 /* AppKit.framework */,
+				200000000000000000000021 /* StoreKit.framework */,
+				200000000000000000000022 /* CoreMIDI.framework */,
+				200000000000000000000023 /* CoreAudio.framework */,
+				200000000000000000000024 /* AVFAudio.framework */,
+				200000000000000000000025 /* XCTest.framework */,
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
+		300000000000000000000006 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				200000000000000000000026 /* xTC.app */,
+				200000000000000000000027 /* xTCTests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		300000000000000000000007 /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				200000000000000000000037 /* AppIcon.png */,
+				200000000000000000000038 /* AppIcon.icns */,
+				200000000000000000000017 /* PrivacyInfo.xcprivacy */,
+				200000000000000000000018 /* ThirdPartyNotices.md */,
+			);
+			path = Resources;
+			sourceTree = "<group>";
+		};
+		300000000000000000000008 /* xTCTests */ = {
+			isa = PBXGroup;
+			children = (
+				200000000000000000000028 /* EntitlementStateTests.swift */,
+				200000000000000000000030 /* OutputAccessControllerTests.swift */,
+				200000000000000000000033 /* EntitlementStoreStateTests.swift */,
+				200000000000000000000036 /* TimecodePreviewTests.swift */,
+			);
+			path = xTCTests;
+			sourceTree = "<group>";
+		};
+		300000000000000000000009 /* StoreKit */ = {
+			isa = PBXGroup;
+			children = (
+				200000000000000000000032 /* xTC.storekit */,
+			);
+			path = StoreKit;
+			sourceTree = "<group>";
+		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		500000000000000000000001 /* xTC */ = {isa = PBXNativeTarget; buildConfigurationList = 800000000000000000000002 /* Build configuration list for PBXNativeTarget \"xTC\" */; buildPhases = (
-			600000000000000000000001 /* Sources */,
-			600000000000000000000002 /* Frameworks */,
-			600000000000000000000003 /* Resources */,
-		); buildRules = (); dependencies = (); name = xTC; productName = xTC; productReference = 200000000000000000000026 /* xTC.app */; productType = "com.apple.product-type.application"; };
-		500000000000000000000002 /* xTCTests */ = {isa = PBXNativeTarget; buildConfigurationList = 800000000000000000000003 /* Build configuration list for PBXNativeTarget \"xTCTests\" */; buildPhases = (
-			600000000000000000000004 /* Sources */,
-			600000000000000000000005 /* Frameworks */,
-		); buildRules = (); dependencies = (900000000000000000000002 /* PBXTargetDependency */, ); name = xTCTests; productName = xTCTests; productReference = 200000000000000000000027 /* xTCTests.xctest */; productType = "com.apple.product-type.bundle.unit-test"; };
+		500000000000000000000001 /* xTC */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 800000000000000000000002 /* Build configuration list for PBXNativeTarget "xTC" */;
+			buildPhases = (
+				600000000000000000000001 /* Sources */,
+				600000000000000000000002 /* Frameworks */,
+				600000000000000000000003 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = xTC;
+			productName = xTC;
+			productReference = 200000000000000000000026 /* xTC.app */;
+			productType = "com.apple.product-type.application";
+		};
+		500000000000000000000002 /* xTCTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 800000000000000000000003 /* Build configuration list for PBXNativeTarget "xTCTests" */;
+			buildPhases = (
+				600000000000000000000004 /* Sources */,
+				600000000000000000000005 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				900000000000000000000002 /* PBXTargetDependency */,
+			);
+			name = xTCTests;
+			productName = xTCTests;
+			productReference = 200000000000000000000027 /* xTCTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
 /* End PBXNativeTarget section */
 
-/* Begin PBXContainerItemProxy section */
-		900000000000000000000001 /* PBXContainerItemProxy */ = {isa = PBXContainerItemProxy; containerPortal = 400000000000000000000001 /* Project object */; proxyType = 1; remoteGlobalIDString = 500000000000000000000001; remoteInfo = xTC; };
-/* End PBXContainerItemProxy section */
-
-/* Begin PBXTargetDependency section */
-		900000000000000000000002 /* PBXTargetDependency */ = {isa = PBXTargetDependency; target = 500000000000000000000001 /* xTC */; targetProxy = 900000000000000000000001 /* PBXContainerItemProxy */; };
-/* End PBXTargetDependency section */
-
 /* Begin PBXProject section */
-		400000000000000000000001 /* Project object */ = {isa = PBXProject; attributes = { LastUpgradeCheck = 2600; TargetAttributes = { 500000000000000000000001 = { CreatedOnToolsVersion = 26.0; }; 500000000000000000000002 = { CreatedOnToolsVersion = 26.0; TestTargetID = 500000000000000000000001; }; }; }; buildConfigurationList = 800000000000000000000001 /* Build configuration list for PBXProject \"xTC\" */; compatibilityVersion = "Xcode 16.0"; developmentRegion = en; hasScannedForEncodings = 0; knownRegions = (en, Base); mainGroup = 300000000000000000000001; productRefGroup = 300000000000000000000006 /* Products */; projectDirPath = ""; projectRoot = ""; targets = (500000000000000000000001 /* xTC */, 500000000000000000000002 /* xTCTests */); };
+		400000000000000000000001 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				LastUpgradeCheck = 2600;
+				TargetAttributes = {
+					500000000000000000000001 = {
+						CreatedOnToolsVersion = 26.0;
+					};
+					500000000000000000000002 = {
+						CreatedOnToolsVersion = 26.0;
+						TestTargetID = 500000000000000000000001;
+					};
+				};
+			};
+			buildConfigurationList = 800000000000000000000001 /* Build configuration list for PBXProject "xTC" */;
+			compatibilityVersion = "Xcode 16.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = 300000000000000000000001;
+			productRefGroup = 300000000000000000000006 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				500000000000000000000001 /* xTC */,
+				500000000000000000000002 /* xTCTests */,
+			);
+		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
-		600000000000000000000003 /* Resources */ = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (
-			100000000000000000000016 /* PrivacyInfo.xcprivacy in Resources */,
-			100000000000000000000017 /* ThirdPartyNotices.md in Resources */,
-			100000000000000000000033 /* AppIcon.png in Resources */,
-		); runOnlyForDeploymentPostprocessing = 0; };
+		600000000000000000000003 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				100000000000000000000016 /* PrivacyInfo.xcprivacy in Resources */,
+				100000000000000000000017 /* ThirdPartyNotices.md in Resources */,
+				100000000000000000000034 /* AppIcon.icns in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
-		600000000000000000000001 /* Sources */ = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (
-			100000000000000000000026 /* EntitlementProviding.swift in Sources */,
-			100000000000000000000030 /* EntitlementStore.swift in Sources */,
-			100000000000000000000031 /* PurchaseView.swift in Sources */,
-			100000000000000000000028 /* OutputAccessController.swift in Sources */,
-			100000000000000000000001 /* xTCApp.swift in Sources */,
-			100000000000000000000002 /* Localization.swift in Sources */,
-			100000000000000000000003 /* AppIconSupport.swift in Sources */,
-			100000000000000000000004 /* WindowSizer.swift in Sources */,
-			100000000000000000000005 /* ContentView.swift in Sources */,
-			100000000000000000000006 /* AudioLTCManager.swift in Sources */,
-			100000000000000000000007 /* AudioLTCOutputManager.swift in Sources */,
-			100000000000000000000008 /* TimecodeMath.swift in Sources */,
-			100000000000000000000009 /* MIDIManager.swift in Sources */,
-			100000000000000000000010 /* MIDIOutputManager.swift in Sources */,
-			100000000000000000000011 /* LTCBridge.c in Sources */,
-			100000000000000000000012 /* decoder.c in Sources */,
-			100000000000000000000013 /* encoder.c in Sources */,
-			100000000000000000000014 /* ltc.c in Sources */,
-			100000000000000000000015 /* timecode.c in Sources */,
-		); runOnlyForDeploymentPostprocessing = 0; };
-		600000000000000000000004 /* Sources */ = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (
-			100000000000000000000025 /* EntitlementStateTests.swift in Sources */,
-			100000000000000000000027 /* OutputAccessControllerTests.swift in Sources */,
-			100000000000000000000029 /* EntitlementStoreStateTests.swift in Sources */,
-			100000000000000000000032 /* TimecodePreviewTests.swift in Sources */,
-		); runOnlyForDeploymentPostprocessing = 0; };
+		600000000000000000000001 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				100000000000000000000026 /* EntitlementProviding.swift in Sources */,
+				100000000000000000000030 /* EntitlementStore.swift in Sources */,
+				100000000000000000000031 /* PurchaseView.swift in Sources */,
+				100000000000000000000028 /* OutputAccessController.swift in Sources */,
+				100000000000000000000001 /* xTCApp.swift in Sources */,
+				100000000000000000000002 /* Localization.swift in Sources */,
+				100000000000000000000003 /* AppIconSupport.swift in Sources */,
+				100000000000000000000004 /* WindowSizer.swift in Sources */,
+				100000000000000000000005 /* ContentView.swift in Sources */,
+				100000000000000000000006 /* AudioLTCManager.swift in Sources */,
+				100000000000000000000007 /* AudioLTCOutputManager.swift in Sources */,
+				100000000000000000000008 /* TimecodeMath.swift in Sources */,
+				100000000000000000000009 /* MIDIManager.swift in Sources */,
+				100000000000000000000010 /* MIDIOutputManager.swift in Sources */,
+				100000000000000000000011 /* LTCBridge.c in Sources */,
+				100000000000000000000012 /* decoder.c in Sources */,
+				100000000000000000000013 /* encoder.c in Sources */,
+				100000000000000000000014 /* ltc.c in Sources */,
+				100000000000000000000015 /* timecode.c in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		600000000000000000000004 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				100000000000000000000025 /* EntitlementStateTests.swift in Sources */,
+				100000000000000000000027 /* OutputAccessControllerTests.swift in Sources */,
+				100000000000000000000029 /* EntitlementStoreStateTests.swift in Sources */,
+				100000000000000000000032 /* TimecodePreviewTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
+/* Begin PBXTargetDependency section */
+		900000000000000000000002 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 500000000000000000000001 /* xTC */;
+			targetProxy = 900000000000000000000001 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
 /* Begin XCBuildConfiguration section */
-		700000000000000000000001 /* Debug */ = {isa = XCBuildConfiguration; buildSettings = { CLANG_C_LANGUAGE_STANDARD = gnu17; CLANG_ENABLE_MODULES = YES; GCC_C_LANGUAGE_STANDARD = gnu99; MACOSX_DEPLOYMENT_TARGET = 15.0; SDKROOT = macosx; }; name = Debug; };
-		700000000000000000000002 /* Release */ = {isa = XCBuildConfiguration; buildSettings = { CLANG_C_LANGUAGE_STANDARD = gnu17; CLANG_ENABLE_MODULES = YES; GCC_C_LANGUAGE_STANDARD = gnu99; MACOSX_DEPLOYMENT_TARGET = 15.0; SDKROOT = macosx; }; name = Release; };
-		700000000000000000000003 /* Debug */ = {isa = XCBuildConfiguration; buildSettings = {
-			ARCHS = arm64;
-			CODE_SIGN_ENTITLEMENTS = xTC/xTC.entitlements;
-			CODE_SIGN_STYLE = Automatic;
-			DEFINES_MODULE = YES;
-			ENABLE_TESTABILITY = YES;
-			ENABLE_HARDENED_RUNTIME = YES;
-			HEADER_SEARCH_PATHS = "$(SRCROOT)/vendor/libltc";
-			INFOPLIST_FILE = xTC/Info.plist;
-			LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/../Frameworks";
-			MACOSX_DEPLOYMENT_TARGET = 15.0;
-			CURRENT_PROJECT_VERSION = 1;
-			MARKETING_VERSION = 1.0;
-			INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
-			ONLY_ACTIVE_ARCH = YES;
-			PRODUCT_BUNDLE_IDENTIFIER = com.luoxiliu.xtc;
-			PRODUCT_NAME = "$(TARGET_NAME)";
-			SWIFT_OBJC_BRIDGING_HEADER = macapp/LTCBridge.h;
-			SWIFT_VERSION = 5.0;
-		}; name = Debug; };
-		700000000000000000000004 /* Release */ = {isa = XCBuildConfiguration; buildSettings = {
-			ARCHS = arm64;
-			CODE_SIGN_ENTITLEMENTS = xTC/xTC.entitlements;
-			CODE_SIGN_STYLE = Automatic;
-			DEFINES_MODULE = YES;
-			ENABLE_HARDENED_RUNTIME = YES;
-			HEADER_SEARCH_PATHS = "$(SRCROOT)/vendor/libltc";
-			INFOPLIST_FILE = xTC/Info.plist;
-			LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/../Frameworks";
-			MACOSX_DEPLOYMENT_TARGET = 15.0;
-			CURRENT_PROJECT_VERSION = 1;
-			MARKETING_VERSION = 1.0;
-			INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
-			PRODUCT_BUNDLE_IDENTIFIER = com.luoxiliu.xtc;
-			PRODUCT_NAME = "$(TARGET_NAME)";
-			SWIFT_OBJC_BRIDGING_HEADER = macapp/LTCBridge.h;
-			SWIFT_VERSION = 5.0;
-		}; name = Release; };
-		700000000000000000000005 /* Debug */ = {isa = XCBuildConfiguration; buildSettings = { ARCHS = arm64; BUNDLE_LOADER = "$(TEST_HOST)"; MACOSX_DEPLOYMENT_TARGET = 15.0; PRODUCT_BUNDLE_IDENTIFIER = com.luoxiliu.xtc.tests; PRODUCT_NAME = "$(TARGET_NAME)"; SDKROOT = macosx; SUPPORTED_PLATFORMS = macosx; SWIFT_VERSION = 5.0; TEST_HOST = "$(BUILT_PRODUCTS_DIR)/xTC.app/Contents/MacOS/xTC"; }; name = Debug; };
-		700000000000000000000006 /* Release */ = {isa = XCBuildConfiguration; buildSettings = { ARCHS = arm64; BUNDLE_LOADER = "$(TEST_HOST)"; MACOSX_DEPLOYMENT_TARGET = 15.0; PRODUCT_BUNDLE_IDENTIFIER = com.luoxiliu.xtc.tests; PRODUCT_NAME = "$(TARGET_NAME)"; SDKROOT = macosx; SUPPORTED_PLATFORMS = macosx; SWIFT_VERSION = 5.0; TEST_HOST = "$(BUILT_PRODUCTS_DIR)/xTC.app/Contents/MacOS/xTC"; }; name = Release; };
+		700000000000000000000001 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CLANG_C_LANGUAGE_STANDARD = gnu17;
+				CLANG_ENABLE_MODULES = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu99;
+				MACOSX_DEPLOYMENT_TARGET = 15.0;
+				SDKROOT = macosx;
+			};
+			name = Debug;
+		};
+		700000000000000000000002 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CLANG_C_LANGUAGE_STANDARD = gnu17;
+				CLANG_ENABLE_MODULES = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu99;
+				MACOSX_DEPLOYMENT_TARGET = 15.0;
+				SDKROOT = macosx;
+			};
+			name = Release;
+		};
+		700000000000000000000003 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ARCHS = arm64;
+				CODE_SIGN_ENTITLEMENTS = xTC/xTC.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEFINES_MODULE = YES;
+				DEVELOPMENT_TEAM = T5WS9M6C5N;
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_TESTABILITY = YES;
+				HEADER_SEARCH_PATHS = "$(SRCROOT)/vendor/libltc";
+				INFOPLIST_FILE = xTC/Info.plist;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 15.0;
+				MARKETING_VERSION = 1.0;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_BUNDLE_IDENTIFIER = com.luoxiliu.xtc;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_OBJC_BRIDGING_HEADER = macapp/LTCBridge.h;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		700000000000000000000004 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ARCHS = arm64;
+				CODE_SIGN_ENTITLEMENTS = xTC/xTC.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				DEFINES_MODULE = YES;
+				DEVELOPMENT_TEAM = T5WS9M6C5N;
+				ENABLE_HARDENED_RUNTIME = YES;
+				HEADER_SEARCH_PATHS = "$(SRCROOT)/vendor/libltc";
+				INFOPLIST_FILE = xTC/Info.plist;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 15.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.luoxiliu.xtc;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_OBJC_BRIDGING_HEADER = macapp/LTCBridge.h;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		700000000000000000000005 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ARCHS = arm64;
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				MACOSX_DEPLOYMENT_TARGET = 15.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.luoxiliu.xtc.tests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SUPPORTED_PLATFORMS = macosx;
+				SWIFT_VERSION = 5.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/xTC.app/Contents/MacOS/xTC";
+			};
+			name = Debug;
+		};
+		700000000000000000000006 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ARCHS = arm64;
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				MACOSX_DEPLOYMENT_TARGET = 15.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.luoxiliu.xtc.tests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SUPPORTED_PLATFORMS = macosx;
+				SWIFT_VERSION = 5.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/xTC.app/Contents/MacOS/xTC";
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		800000000000000000000001 /* Build configuration list for PBXProject "xTC" */ = {isa = XCConfigurationList; buildConfigurations = (700000000000000000000001 /* Debug */, 700000000000000000000002 /* Release */); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
-		800000000000000000000002 /* Build configuration list for PBXNativeTarget "xTC" */ = {isa = XCConfigurationList; buildConfigurations = (700000000000000000000003 /* Debug */, 700000000000000000000004 /* Release */); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
-		800000000000000000000003 /* Build configuration list for PBXNativeTarget "xTCTests" */ = {isa = XCConfigurationList; buildConfigurations = (700000000000000000000005 /* Debug */, 700000000000000000000006 /* Release */); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
+		800000000000000000000001 /* Build configuration list for PBXProject "xTC" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				700000000000000000000001 /* Debug */,
+				700000000000000000000002 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		800000000000000000000002 /* Build configuration list for PBXNativeTarget "xTC" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				700000000000000000000003 /* Debug */,
+				700000000000000000000004 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		800000000000000000000003 /* Build configuration list for PBXNativeTarget "xTCTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				700000000000000000000005 /* Debug */,
+				700000000000000000000006 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 /* End XCConfigurationList section */
 	};
 	rootObject = 400000000000000000000001 /* Project object */;

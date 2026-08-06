@@ -38,7 +38,8 @@
       ignoresPersistentStateOnLaunch = "NO"
       debugDocumentVersioning = "YES"
       debugServiceExtension = "internal"
-      allowLocationSimulation = "YES">
+      allowLocationSimulation = "YES"
+      storeKitConfigurationFileReference = "xTC/StoreKit/xTC.storekit">
       <BuildableProductRunnable
          runnableDebuggingMode = "0">
          <BuildableReference

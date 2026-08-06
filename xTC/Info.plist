@@ -10,8 +10,8 @@
   <string>$(EXECUTABLE_NAME)</string>
   <key>CFBundleIdentifier</key>
   <string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
-  <key>CFBundleIconFile</key>
-  <string>AppIcon.png</string>
+	<key>CFBundleIconFile</key>
+	<string>AppIcon</string>
   <key>LSApplicationCategoryType</key>
   <string>public.app-category.utilities</string>
   <key>CFBundleInfoDictionaryVersion</key>
